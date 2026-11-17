@@ -17,8 +17,8 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "pl.dev4u.bak.piano_exercises"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // Flutter 3.50 resolves flutter.minSdkVersion to 24 (>= 21 required by universal_ble).
+        // flutter_midi_command_ble merges BLUETOOTH_SCAN (neverForLocation) and BLUETOOTH_CONNECT.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
