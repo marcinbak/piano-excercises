@@ -16,7 +16,7 @@ Rules for where code goes and what may depend on what. Enforced by `flutter anal
 
 `ui/ → state/ → domain/ ← data/` inside each feature.
 
-- `domain/` is pure Dart: imports nothing from `package:flutter`, `flutter_riverpod`, `ui/`, `state/`, or `data/`.
+- `domain/` is pure Dart: imports nothing from `package:flutter`, `package:material_ui`, `flutter_riverpod`, `ui/`, `state/`, or `data/`.
 - `shared/` never imports `features/` or `app/`.
 - Feature → feature imports use only the target feature's barrel file (`lib/features/<name>/<name>.dart`); no cycles.
 - Invert dependencies (an abstract interface in `domain/`, implemented in `data/`) only at real I/O boundaries (BLE-MIDI plugin, local storage, clock/randomness).
