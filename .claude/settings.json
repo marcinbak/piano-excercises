@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dart format --output=none --set-exit-if-changed .)",
+      "Bash(flutter analyze --fatal-infos)",
+      "Bash(flutter test*)",
+      "Bash(python3 scripts/hotspots.py*)"
+    ]
+  }
+}
