@@ -5,6 +5,7 @@ export 'domain/midi_repository.dart'
     show MidiBluetoothStatus, MidiOperationException, MidiRepository;
 export 'state/midi_providers.dart'
     show
+        MidiNoteLogEntry,
         MidiNoteLogNotifier,
         MidiScanController,
         MidiScanState,

@@ -189,11 +189,26 @@ void main() {
 
       final log = sub.read();
       expect(log.length, 30);
-      expect(log.first.noteNumber, 74);
-      expect(log.last.noteNumber, 45);
+      expect(log.first.sequence, 35);
+      expect(log.first.event.noteNumber, 74);
+      expect(log.last.sequence, 6);
+      expect(log.last.event.noteNumber, 45);
 
       container.read(midiNoteLogProvider.notifier).clear();
       expect(sub.read(), isEmpty);
+
+      repository.noteEventsController.add(
+        MidiNoteEvent.fromChannelMessage(
+          noteNumber: 60,
+          velocity: 80,
+          isNoteOn: true,
+          channel: 0,
+          deviceId: 'ble-1',
+          timestampMs: 500,
+        ),
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(sub.read().single.sequence, 1);
       sub.close();
     },
   );
@@ -259,6 +274,29 @@ void main() {
       pendingStart.complete();
       await expectLater(startFuture, completes);
       expect(repository.stopScanCalls, 2);
+    },
+  );
+
+  test(
+    'startScan surfaces error when Bluetooth becomes poweredOff mid-flight',
+    () async {
+      repository.bluetoothStatus = MidiBluetoothStatus.unknown;
+      repository.onStartScan = () async {
+        repository.bluetoothStatus = MidiBluetoothStatus.poweredOff;
+        repository.bluetoothController.add(MidiBluetoothStatus.poweredOff);
+        // Yield a turn so ref.listen processes poweredOff before startScan throws.
+        await Future<void>.delayed(Duration.zero);
+        throw const MidiOperationException('Bluetooth is turned off.');
+      };
+
+      final sub = container.listen(midiScanControllerProvider, (_, _) {});
+      final controller = container.read(midiScanControllerProvider.notifier);
+
+      await controller.startScan();
+
+      expect(sub.read().isScanning, isFalse);
+      expect(sub.read().errorMessage, 'Bluetooth is turned off.');
+      sub.close();
     },
   );
 }

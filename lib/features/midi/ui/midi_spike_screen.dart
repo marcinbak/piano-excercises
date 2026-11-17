@@ -58,7 +58,7 @@ class MidiSpikeScreen extends ConsumerWidget {
               Expanded(
                 flex: 3,
                 child: MidiNoteLogSection(
-                  events: noteLog,
+                  entries: noteLog,
                   onClear: ref.read(midiNoteLogProvider.notifier).clear,
                 ),
               ),

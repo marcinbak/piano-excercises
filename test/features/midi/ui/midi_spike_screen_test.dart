@@ -209,6 +209,20 @@ void main() {
     await tester.pump();
     expect(find.text('Live Note Events (0)'), findsOneWidget);
 
+    repository.noteEventsController.add(
+      MidiNoteEvent.fromChannelMessage(
+        noteNumber: 64,
+        velocity: 90,
+        isNoteOn: true,
+        channel: 0,
+        deviceId: 'ble-1',
+        timestampMs: 300,
+      ),
+    );
+    await tester.pump();
+    expect(find.text('MIDI 64 · vel 90 · ch 1 · 300 ms'), findsOneWidget);
+    expect(find.text('#1'), findsOneWidget);
+
     await tester.tap(find.text('Disconnect'));
     await tester.pump();
     expect(repository.disconnectCalls, 1);

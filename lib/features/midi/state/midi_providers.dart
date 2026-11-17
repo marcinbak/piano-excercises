@@ -58,33 +58,56 @@ final midiBluetoothStatusProvider = StreamProvider<MidiBluetoothStatus>((ref) {
   });
 });
 
-/// Collects recent Note On/Off events (newest first) for the spike monitor feed.
-class MidiNoteLogNotifier extends Notifier<List<MidiNoteEvent>> {
-  static const int maxEntries = 30;
+/// Note event paired with a stable monotonic sequence number for live logging.
+final class MidiNoteLogEntry {
+  const MidiNoteLogEntry({required this.sequence, required this.event});
+
+  final int sequence;
+  final MidiNoteEvent event;
 
   @override
-  List<MidiNoteEvent> build() {
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is MidiNoteLogEntry &&
+            other.sequence == sequence &&
+            other.event == event);
+  }
+
+  @override
+  int get hashCode => Object.hash(sequence, event);
+}
+
+/// Collects recent Note On/Off events (newest first) for the spike monitor feed.
+class MidiNoteLogNotifier extends Notifier<List<MidiNoteLogEntry>> {
+  static const int maxEntries = 30;
+  int _nextSequence = 0;
+
+  @override
+  List<MidiNoteLogEntry> build() {
     final repository = ref.watch(midiRepositoryProvider);
+    _nextSequence = 0;
     final subscription = repository.noteEventsStream.listen(_appendEvent);
     ref.onDispose(subscription.cancel);
-    return const <MidiNoteEvent>[];
+    return const <MidiNoteLogEntry>[];
   }
 
   void _appendEvent(MidiNoteEvent event) {
     if (!ref.mounted) {
       return;
     }
-    final next = <MidiNoteEvent>[event, ...state];
+    final entry = MidiNoteLogEntry(sequence: ++_nextSequence, event: event);
+    final next = <MidiNoteLogEntry>[entry, ...state];
     state = next.length > maxEntries ? next.sublist(0, maxEntries) : next;
   }
 
   void clear() {
-    state = const <MidiNoteEvent>[];
+    _nextSequence = 0;
+    state = const <MidiNoteLogEntry>[];
   }
 }
 
 final midiNoteLogProvider =
-    NotifierProvider<MidiNoteLogNotifier, List<MidiNoteEvent>>(
+    NotifierProvider<MidiNoteLogNotifier, List<MidiNoteLogEntry>>(
       MidiNoteLogNotifier.new,
     );
 
@@ -140,7 +163,6 @@ class MidiScanController extends Notifier<MidiScanState> {
   @override
   MidiScanState build() {
     _repository = ref.watch(midiRepositoryProvider);
-    _scanGeneration = 0;
     _isScanActive = false;
     ref.onDispose(() {
       _scanGeneration += 1;
@@ -159,7 +181,7 @@ class MidiScanController extends Notifier<MidiScanState> {
           status != MidiBluetoothStatus.poweredOn &&
           status != MidiBluetoothStatus.unknown &&
           state.isScanning) {
-        _scanGeneration += 1;
+        // Keep _scanGeneration unchanged so an in-flight startScan() error still surfaces.
         _isScanActive = false;
         state = state.copyWith(isScanning: false);
         unawaited(_repository.stopScan().catchError((Object _) {}));
@@ -177,7 +199,7 @@ class MidiScanController extends Notifier<MidiScanState> {
     state = state.copyWith(isScanning: true, clearErrorMessage: true);
     try {
       await _repository.startScan();
-      if (!ref.mounted || generation != _scanGeneration) {
+      if (!ref.mounted || generation != _scanGeneration || !state.isScanning) {
         if (!ref.mounted || !state.isScanning) {
           _isScanActive = false;
           await _stopScanSafely();

@@ -1,15 +1,15 @@
 import 'package:material_ui/material_ui.dart';
-import 'package:piano_exercises/features/midi/domain/midi_note_event.dart';
+import 'package:piano_exercises/features/midi/state/midi_providers.dart';
 
 /// Displays the live Note On/Off feed with a clear action.
 class MidiNoteLogSection extends StatelessWidget {
   const MidiNoteLogSection({
     super.key,
-    required this.events,
+    required this.entries,
     required this.onClear,
   });
 
-  final List<MidiNoteEvent> events;
+  final List<MidiNoteLogEntry> entries;
   final VoidCallback onClear;
 
   @override
@@ -20,12 +20,12 @@ class MidiNoteLogSection extends StatelessWidget {
         Row(
           children: <Widget>[
             Text(
-              'Live Note Events (${events.length})',
+              'Live Note Events (${entries.length})',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const Spacer(),
             TextButton.icon(
-              onPressed: events.isEmpty ? null : onClear,
+              onPressed: entries.isEmpty ? null : onClear,
               icon: const Icon(Icons.delete_outline, size: 18),
               label: const Text('Clear'),
             ),
@@ -33,7 +33,7 @@ class MidiNoteLogSection extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Expanded(
-          child: events.isEmpty
+          child: entries.isEmpty
               ? const Center(
                   child: Text(
                     'Play a key on a connected MIDI keyboard to see live Note On/Off events.',
@@ -41,12 +41,10 @@ class MidiNoteLogSection extends StatelessWidget {
                   ),
                 )
               : ListView.separated(
-                  itemCount: events.length,
+                  itemCount: entries.length,
                   separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) => _NoteEventTile(
-                    event: events[index],
-                    sequenceNumber: events.length - index,
-                  ),
+                  itemBuilder: (context, index) =>
+                      _NoteEventTile(entry: entries[index]),
                 ),
         ),
       ],
@@ -55,13 +53,13 @@ class MidiNoteLogSection extends StatelessWidget {
 }
 
 class _NoteEventTile extends StatelessWidget {
-  const _NoteEventTile({required this.event, required this.sequenceNumber});
+  const _NoteEventTile({required this.entry});
 
-  final MidiNoteEvent event;
-  final int sequenceNumber;
+  final MidiNoteLogEntry entry;
 
   @override
   Widget build(BuildContext context) {
+    final event = entry.event;
     final colorScheme = Theme.of(context).colorScheme;
     final badgeColor = event.isNoteOn
         ? colorScheme.primaryContainer
@@ -95,7 +93,7 @@ class _NoteEventTile extends StatelessWidget {
         'MIDI ${event.noteNumber} · vel ${event.velocity} · ch ${event.channel + 1} · ${event.timestampMs} ms',
       ),
       trailing: Text(
-        '#$sequenceNumber',
+        '#${entry.sequence}',
         style: Theme.of(context).textTheme.labelMedium,
       ),
     );
