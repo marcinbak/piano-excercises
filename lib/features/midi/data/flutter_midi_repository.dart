@@ -236,6 +236,13 @@ class FlutterMidiRepository implements MidiRepository {
       return;
     }
     _currentBluetoothStatus = status;
+    if (status != MidiBluetoothStatus.poweredOn &&
+        status != MidiBluetoothStatus.unknown) {
+      // Reset the plugin's internal _isScanning flag when Bluetooth is no longer active.
+      try {
+        _midiCommand.stopScanningForBluetoothDevices();
+      } catch (_) {}
+    }
     if (!_bluetoothStateController.isClosed) {
       _bluetoothStateController.add(status);
     }

@@ -43,8 +43,10 @@ class MidiNoteLogSection extends StatelessWidget {
               : ListView.separated(
                   itemCount: events.length,
                   separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) =>
-                      _NoteEventTile(event: events[index]),
+                  itemBuilder: (context, index) => _NoteEventTile(
+                    event: events[index],
+                    sequenceNumber: events.length - index,
+                  ),
                 ),
         ),
       ],
@@ -53,9 +55,10 @@ class MidiNoteLogSection extends StatelessWidget {
 }
 
 class _NoteEventTile extends StatelessWidget {
-  const _NoteEventTile({required this.event});
+  const _NoteEventTile({required this.event, required this.sequenceNumber});
 
   final MidiNoteEvent event;
+  final int sequenceNumber;
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +92,11 @@ class _NoteEventTile extends StatelessWidget {
         style: Theme.of(context).textTheme.titleMedium,
       ),
       subtitle: Text(
-        'MIDI ${event.noteNumber} · vel ${event.velocity} · ch ${event.channel + 1}',
+        'MIDI ${event.noteNumber} · vel ${event.velocity} · ch ${event.channel + 1} · ${event.timestampMs} ms',
+      ),
+      trailing: Text(
+        '#$sequenceNumber',
+        style: Theme.of(context).textTheme.labelMedium,
       ),
     );
   }

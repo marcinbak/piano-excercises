@@ -134,10 +134,22 @@ final class MidiScanState {
 /// Manages BLE-MIDI scan and connect/disconnect actions with error surfacing.
 class MidiScanController extends Notifier<MidiScanState> {
   late MidiRepository _repository;
+  int _scanGeneration = 0;
+  bool _isScanActive = false;
 
   @override
   MidiScanState build() {
     _repository = ref.watch(midiRepositoryProvider);
+    _scanGeneration = 0;
+    _isScanActive = false;
+    ref.onDispose(() {
+      _scanGeneration += 1;
+      // Use a plain field here because ref/state are already unmounted during dispose.
+      if (_isScanActive) {
+        _isScanActive = false;
+        unawaited(_repository.stopScan().catchError((Object _) {}));
+      }
+    });
     ref.listen<AsyncValue<MidiBluetoothStatus>>(midiBluetoothStatusProvider, (
       _,
       next,
@@ -147,7 +159,10 @@ class MidiScanController extends Notifier<MidiScanState> {
           status != MidiBluetoothStatus.poweredOn &&
           status != MidiBluetoothStatus.unknown &&
           state.isScanning) {
+        _scanGeneration += 1;
+        _isScanActive = false;
         state = state.copyWith(isScanning: false);
+        unawaited(_repository.stopScan().catchError((Object _) {}));
       }
     });
     return const MidiScanState();
@@ -157,13 +172,26 @@ class MidiScanController extends Notifier<MidiScanState> {
     if (state.isScanning) {
       return;
     }
+    final generation = ++_scanGeneration;
+    _isScanActive = true;
     state = state.copyWith(isScanning: true, clearErrorMessage: true);
     try {
       await _repository.startScan();
-    } catch (error) {
-      if (!ref.mounted) {
+      if (!ref.mounted || generation != _scanGeneration) {
+        if (!ref.mounted || !state.isScanning) {
+          _isScanActive = false;
+          await _stopScanSafely();
+        }
         return;
       }
+    } catch (error) {
+      if (!ref.mounted || generation != _scanGeneration) {
+        if (!ref.mounted) {
+          _isScanActive = false;
+        }
+        return;
+      }
+      _isScanActive = false;
       state = state.copyWith(
         isScanning: false,
         errorMessage: _formatError(error),
@@ -172,6 +200,8 @@ class MidiScanController extends Notifier<MidiScanState> {
   }
 
   Future<void> stopScan() async {
+    _scanGeneration += 1;
+    _isScanActive = false;
     state = state.copyWith(isScanning: false, clearErrorMessage: true);
     try {
       await _repository.stopScan();
@@ -181,6 +211,12 @@ class MidiScanController extends Notifier<MidiScanState> {
       }
       state = state.copyWith(errorMessage: _formatError(error));
     }
+  }
+
+  Future<void> _stopScanSafely() async {
+    try {
+      await _repository.stopScan();
+    } catch (_) {}
   }
 
   Future<void> connect(MidiDeviceInfo device) async {

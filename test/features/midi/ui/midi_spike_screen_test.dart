@@ -186,8 +186,24 @@ void main() {
     expect(find.text('C4'), findsNWidgets(2));
     expect(find.text('ON'), findsOneWidget);
     expect(find.text('OFF'), findsOneWidget);
-    expect(find.text('MIDI 60 · vel 100 · ch 1'), findsOneWidget);
-    expect(find.text('MIDI 60 · vel 0 · ch 1'), findsOneWidget);
+    expect(find.text('MIDI 60 · vel 100 · ch 1 · 42 ms'), findsOneWidget);
+    expect(find.text('MIDI 60 · vel 0 · ch 1 · 84 ms'), findsOneWidget);
+    expect(find.text('#1'), findsOneWidget);
+    expect(find.text('#2'), findsOneWidget);
+
+    repository.noteEventsController.add(
+      MidiNoteEvent.fromChannelMessage(
+        noteNumber: 60,
+        velocity: 100,
+        isNoteOn: true,
+        channel: 0,
+        deviceId: 'ble-1',
+        timestampMs: 250,
+      ),
+    );
+    await tester.pump();
+    expect(find.text('MIDI 60 · vel 100 · ch 1 · 250 ms'), findsOneWidget);
+    expect(find.text('#3'), findsOneWidget);
 
     await tester.tap(find.text('Clear'));
     await tester.pump();

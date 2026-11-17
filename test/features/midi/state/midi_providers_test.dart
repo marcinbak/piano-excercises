@@ -17,6 +17,7 @@ class _FakeMidiRepository implements MidiRepository {
 
   Object? startScanError;
   Object? stopScanError;
+  Future<void> Function()? onStartScan;
   Future<void> Function(MidiDeviceInfo device)? onConnect;
   Future<void> Function(MidiDeviceInfo device)? onDisconnect;
 
@@ -42,6 +43,9 @@ class _FakeMidiRepository implements MidiRepository {
   @override
   Future<void> startScan() async {
     startScanCalls += 1;
+    if (onStartScan != null) {
+      await onStartScan!();
+    }
     if (startScanError != null) {
       throw startScanError!;
     }
@@ -206,6 +210,55 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(sub.read().isScanning, isFalse);
+    expect(repository.stopScanCalls, 1);
     sub.close();
   });
+
+  test(
+    'stopScan cancels an in-flight startScan once startScan resolves',
+    () async {
+      final pendingStart = Completer<void>();
+      repository.onStartScan = () => pendingStart.future;
+
+      final sub = container.listen(midiScanControllerProvider, (_, _) {});
+      final controller = container.read(midiScanControllerProvider.notifier);
+
+      final startFuture = controller.startScan();
+      expect(sub.read().isScanning, isTrue);
+      expect(repository.startScanCalls, 1);
+
+      await controller.stopScan();
+      expect(sub.read().isScanning, isFalse);
+      expect(repository.stopScanCalls, 1);
+
+      pendingStart.complete();
+      await startFuture;
+
+      expect(sub.read().isScanning, isFalse);
+      expect(sub.read().errorMessage, isNull);
+      expect(repository.stopScanCalls, 2);
+      sub.close();
+    },
+  );
+
+  test(
+    'disposing while startScan is pending stops scan without throwing',
+    () async {
+      final pendingStart = Completer<void>();
+      repository.onStartScan = () => pendingStart.future;
+
+      final sub = container.listen(midiScanControllerProvider, (_, _) {});
+      final controller = container.read(midiScanControllerProvider.notifier);
+
+      final startFuture = controller.startScan();
+      expect(sub.read().isScanning, isTrue);
+
+      container.dispose();
+      expect(repository.stopScanCalls, 1);
+
+      pendingStart.complete();
+      await expectLater(startFuture, completes);
+      expect(repository.stopScanCalls, 2);
+    },
+  );
 }
