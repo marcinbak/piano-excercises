@@ -1,6 +1,6 @@
 # piano-excercises
 
-Mobile app for piano sight-reading drills inspired by [MusoPhone Read Music Fast exercises](https://musophone.com/tests-new/?exercise=7).
+Mobile app for piano sight-reading drills inspired by [MusoPhone](https://musophone.com/tests-new/?exercise=7). All credits for the original exercise concept belong to the creators and owners of MusoPhone.
 
 - **Target Platforms:** iOS and Android (`pl.dev4u.bak.pianoExercises` / `pl.dev4u.bak.piano_exercises`)
 - **Stack:** Flutter (Dart), `flutter_riverpod`
