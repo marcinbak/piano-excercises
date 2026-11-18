@@ -44,7 +44,8 @@ Before calling work done: format check, lint & typecheck, size gate, and test pa
 
 One line per pitfall, grouped by area; full write-ups live in `docs/pitfalls/<area>.md`. Read the relevant file before working in that area.
 
-- *(None recorded yet — see [docs/pitfalls/README.md](docs/pitfalls/README.md).)*
+- **BLE-MIDI:** Call `stopScanningForBluetoothDevices()` on Bluetooth power-off and timeout `waitUntilBluetoothIsInitialized()` — see [docs/pitfalls/ble-midi.md](docs/pitfalls/ble-midi.md).
+- **iOS:** Physical device deployment requires Xcode Apple Developer signing beyond `--no-codesign` — see [docs/pitfalls/ios.md](docs/pitfalls/ios.md).
 
 ## Continuous documentation
 

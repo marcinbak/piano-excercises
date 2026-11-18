@@ -33,7 +33,7 @@ Replicate the core note-reading drill loop from [MusoPhone Exercise 7](https://m
 
 ## 5. Open Decisions
 
-- **BLE-MIDI & Staff Packages:** Verify `flutter_midi_command` + `flutter_midi_command_ble` and SMuFL staff rendering approach on physical hardware.
+- **BLE-MIDI & Staff Packages:** Integrated `flutter_midi_command` + `flutter_midi_command_ble` in [MidiSpikeScreen](../lib/features/midi/ui/midi_spike_screen.dart); physical hardware test and SMuFL renderer selection remain open.
 - **Fallback Input:** Decide whether to include an on-screen piano or microphone pitch detection when no MIDI keyboard is connected.
 - **USB-MIDI:** Decide whether to support wired USB-MIDI alongside BLE-MIDI.
 - **Pre-Release Permission Check (Deferred):** Confirm permission with the creators/owners of [MusoPhone](https://musophone.com/tests-new/?exercise=7) before any public release; all credits go to them.

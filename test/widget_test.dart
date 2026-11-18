@@ -1,30 +1,59 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:piano_exercises/app/app.dart';
+import 'package:piano_exercises/features/midi/midi.dart';
 
-import 'package:piano_exercises/main.dart';
+class _StubMidiRepository implements MidiRepository {
+  @override
+  Stream<List<MidiDeviceInfo>> get devicesStream =>
+      const Stream<List<MidiDeviceInfo>>.empty();
+
+  @override
+  Stream<MidiNoteEvent> get noteEventsStream =>
+      const Stream<MidiNoteEvent>.empty();
+
+  @override
+  Stream<MidiBluetoothStatus> get bluetoothStateStream =>
+      const Stream<MidiBluetoothStatus>.empty();
+
+  @override
+  MidiBluetoothStatus get currentBluetoothStatus => MidiBluetoothStatus.unknown;
+
+  @override
+  Future<List<MidiDeviceInfo>> currentDevices() async =>
+      const <MidiDeviceInfo>[];
+
+  @override
+  Future<void> startScan() async {}
+
+  @override
+  Future<void> stopScan() async {}
+
+  @override
+  Future<void> connect(MidiDeviceInfo device) async {}
+
+  @override
+  Future<void> disconnect(MidiDeviceInfo device) async {}
+
+  @override
+  Future<void> dispose() async {}
+}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
-
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  testWidgets('PianoExercisesApp renders BLE-MIDI Spike screen', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          midiRepositoryProvider.overrideWithValue(_StubMidiRepository()),
+        ],
+        child: const PianoExercisesApp(),
+      ),
+    );
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('BLE-MIDI Spike'), findsOneWidget);
+    expect(find.text('Scan'), findsOneWidget);
   });
 }
