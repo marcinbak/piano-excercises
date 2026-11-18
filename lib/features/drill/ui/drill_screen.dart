@@ -100,6 +100,9 @@ class DrillScreen extends ConsumerWidget {
     WidgetRef ref,
   ) async {
     final drillController = ref.read(drillControllerProvider.notifier);
+    if (drillController.isPaused) {
+      return;
+    }
     drillController.setPaused(true);
     try {
       await Navigator.of(context).push<void>(

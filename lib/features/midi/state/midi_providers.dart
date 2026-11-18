@@ -199,9 +199,14 @@ class MidiScanController extends Notifier<MidiScanState> {
     state = state.copyWith(isScanning: true, clearErrorMessage: true);
     try {
       await _repository.startScan();
-      if (!ref.mounted || generation != _scanGeneration || !state.isScanning) {
-        _isScanActive = false;
-        await _stopScanSafely();
+      if (!ref.mounted ||
+          generation != _scanGeneration ||
+          !_isScanActive ||
+          !state.isScanning) {
+        if (!ref.mounted || !_isScanActive || !state.isScanning) {
+          _isScanActive = false;
+          await _stopScanSafely();
+        }
         return;
       }
     } catch (error) {

@@ -327,4 +327,68 @@ void main() {
     ]);
     sub.close();
   });
+
+  test('late completion of superseded startScan does not stop a newer active scan', () async {
+    final pendingStart1 = Completer<void>();
+    var callCount = 0;
+    repository.onStartScan = () {
+      callCount += 1;
+      if (callCount == 1) {
+        return pendingStart1.future;
+      }
+      return Future<void>.value();
+    };
+
+    final sub = container.listen(midiScanControllerProvider, (_, _) {});
+    final controller = container.read(midiScanControllerProvider.notifier);
+
+    final scan1Future = controller.startScan();
+    expect(sub.read().isScanning, isTrue);
+
+    await controller.stopScan();
+    expect(sub.read().isScanning, isFalse);
+    expect(repository.stopScanCalls, 1);
+
+    await controller.startScan();
+    expect(sub.read().isScanning, isTrue);
+    expect(repository.startScanCalls, 2);
+
+    // Scan #1 resolves after Scan #2 is active: Scan #2 must NOT be stopped.
+    pendingStart1.complete();
+    await scan1Future;
+    expect(sub.read().isScanning, isTrue);
+    expect(repository.stopScanCalls, 1);
+
+    // Stopping Scan #2 afterwards still invokes repository.stopScan() cleanly.
+    await controller.stopScan();
+    expect(sub.read().isScanning, isFalse);
+    expect(repository.stopScanCalls, 2);
+    sub.close();
+  });
+
+  test(
+    'stopScanIfActive stops a late-resolving in-flight startScan cleanly',
+    () async {
+      final pendingStart = Completer<void>();
+      repository.onStartScan = () => pendingStart.future;
+
+      final sub = container.listen(midiScanControllerProvider, (_, _) {});
+      final controller = container.read(midiScanControllerProvider.notifier);
+
+      final scanFuture = controller.startScan();
+      expect(sub.read().isScanning, isTrue);
+      expect(repository.startScanCalls, 1);
+
+      controller.stopScanIfActive();
+      expect(repository.stopScanCalls, 1);
+
+      pendingStart.complete();
+      await scanFuture;
+      await Future<void>.delayed(Duration.zero);
+
+      expect(sub.read().isScanning, isFalse);
+      expect(repository.stopScanCalls, 2);
+      sub.close();
+    },
+  );
 }

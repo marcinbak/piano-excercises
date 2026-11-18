@@ -555,4 +555,73 @@ void main() {
       picture.dispose();
     },
   );
+
+  testWidgets(
+    'rapid double-tap on midi-status-button pushes only one MidiConnectionScreen route and stays paused until popped',
+    (tester) async {
+      final repository = _FakeMidiRepository();
+      addTearDown(repository.dispose);
+      final observer = _PushCountingObserver();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            midiRepositoryProvider.overrideWithValue(repository),
+            drillRandomIntProvider.overrideWithValue((_) => 0),
+          ],
+          child: MaterialApp(
+            navigatorObservers: <NavigatorObserver>[observer],
+            home: const DrillScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(observer.pushCount, 1);
+
+      final statusButton = find.byKey(
+        const ValueKey<String>('midi-status-button'),
+      );
+      await tester.tap(statusButton);
+      await tester.tap(statusButton);
+      await tester.pumpAndSettle();
+
+      // Home route (1) + single MidiConnectionScreen route (2).
+      expect(observer.pushCount, 2);
+      expect(find.byType(MidiConnectionScreen), findsOneWidget);
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MidiConnectionScreen)),
+      );
+      expect(container.read(drillControllerProvider.notifier).isPaused, isTrue);
+
+      // MIDI input played while open must not mutate DrillController state.
+      repository.noteEventsController.add(_noteOn(61));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      repository.noteEventsController.add(_noteOff(61));
+      await tester.pump();
+      expect(find.text('C#4'), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MidiConnectionScreen), findsNothing);
+      expect(
+        container.read(drillControllerProvider.notifier).isPaused,
+        isFalse,
+      );
+      expect(_findStaffPainter(tester).wrongPlayedNotes, isEmpty);
+      expect(find.text('0%'), findsOneWidget);
+    },
+  );
+}
+
+final class _PushCountingObserver extends NavigatorObserver {
+  int pushCount = 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushCount += 1;
+    super.didPush(route, previousRoute);
+  }
 }
