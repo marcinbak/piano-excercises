@@ -25,7 +25,16 @@ enum StageId {
 
 /// Immutable curriculum stage describing newly introduced and cumulative notes.
 final class ProgressionStage {
-  const ProgressionStage({
+  ProgressionStage({
+    required this.id,
+    required this.title,
+    required this.description,
+    required List<StaffNote> introducedNotes,
+    required List<StaffNote> cumulativeNotes,
+  }) : introducedNotes = List<StaffNote>.unmodifiable(introducedNotes),
+       cumulativeNotes = List<StaffNote>.unmodifiable(cumulativeNotes);
+
+  const ProgressionStage._({
     required this.id,
     required this.title,
     required this.description,
@@ -113,35 +122,35 @@ abstract final class ProgressionCatalog {
   ];
 
   static const List<ProgressionStage> stages = <ProgressionStage>[
-    ProgressionStage(
+    ProgressionStage._(
       id: StageId.stage1,
       title: 'Middle C',
       description: 'Identify Middle C (C4) on both treble and bass clefs.',
       introducedNotes: _stage1Introduced,
       cumulativeNotes: _stage1Introduced,
     ),
-    ProgressionStage(
+    ProgressionStage._(
       id: StageId.stage2,
       title: 'Additional Cs',
       description: 'Add octave anchors C3 on bass and C5 on treble.',
       introducedNotes: _stage2Introduced,
       cumulativeNotes: _stage2Cumulative,
     ),
-    ProgressionStage(
+    ProgressionStage._(
       id: StageId.stage3,
       title: 'All Treble & Bass Cs',
       description: 'Complete C anchors with two-ledger C2 and C6.',
       introducedNotes: _stage3Introduced,
       cumulativeNotes: _stage3Cumulative,
     ),
-    ProgressionStage(
+    ProgressionStage._(
       id: StageId.stage4,
       title: 'Base Landmark Notes',
       description: 'Add clef reference landmarks F3 (bass) and G4 (treble).',
       introducedNotes: _stage4Introduced,
       cumulativeNotes: _stage4Cumulative,
     ),
-    ProgressionStage(
+    ProgressionStage._(
       id: StageId.stage5,
       title: 'All Natural Notes',
       description:

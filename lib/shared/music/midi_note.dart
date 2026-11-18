@@ -19,6 +19,10 @@ final class MidiNote implements Comparable<MidiNote> {
     required int octave,
     Accidental accidental = Accidental.natural,
   }) {
+    // Reject extreme octaves before multiplying so (octave + 1) * 12 cannot
+    // wrap modulo 2^64 into 0..127 (B#-2 is MIDI 0; any octave outside -2..10
+    // is guaranteed out of range for any accidental).
+    RangeError.checkValueInInterval(octave, -2, 10, 'octave');
     final number =
         ((octave + 1) * 12) + note.semitoneOffset + accidental.semitoneDelta;
     RangeError.checkValueInInterval(number, minNumber, maxNumber, 'number');

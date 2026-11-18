@@ -120,6 +120,15 @@ void main() {
         );
 
         expect(
+          MidiNote.fromPitch(
+            DiatonicNote.b,
+            octave: -2,
+            accidental: Accidental.sharp,
+          ),
+          const MidiNote(0),
+        );
+
+        expect(
           () => MidiNote.fromPitch(
             DiatonicNote.c,
             octave: -1,
@@ -137,6 +146,12 @@ void main() {
         );
         expect(
           () => MidiNote.fromPitch(DiatonicNote.c, octave: -2),
+          throwsRangeError,
+        );
+        // Would wrap 64-bit signed ((octave + 1) * 12) + 4 into MIDI 60 without
+        // pre-multiplication octave validation.
+        expect(
+          () => MidiNote.fromPitch(DiatonicNote.e, octave: 1537228672809129305),
           throwsRangeError,
         );
       },

@@ -144,5 +144,39 @@ void main() {
         throwsUnsupportedError,
       );
     });
+
+    test(
+      'defensively copies and freezes caller lists in public constructor',
+      () {
+        const trebleC4 = StaffNote(
+          note: DiatonicNote.c,
+          octave: 4,
+          clef: Clef.treble,
+        );
+        const bassC4 = StaffNote(
+          note: DiatonicNote.c,
+          octave: 4,
+          clef: Clef.bass,
+        );
+        final introduced = <StaffNote>[trebleC4];
+        final cumulative = <StaffNote>[trebleC4];
+
+        final stage = ProgressionStage(
+          id: StageId.stage1,
+          title: 'Custom',
+          description: 'Mutable source test',
+          introducedNotes: introduced,
+          cumulativeNotes: cumulative,
+        );
+
+        introduced.add(bassC4);
+        cumulative.add(bassC4);
+
+        expect(stage.introducedNotes, const <StaffNote>[trebleC4]);
+        expect(stage.cumulativeNotes, const <StaffNote>[trebleC4]);
+        expect(() => stage.introducedNotes.add(bassC4), throwsUnsupportedError);
+        expect(() => stage.cumulativeNotes.add(bassC4), throwsUnsupportedError);
+      },
+    );
   });
 }

@@ -246,6 +246,15 @@ void main() {
 
     test('validated factory rejects notes outside MIDI 0..127', () {
       expect(
+        StaffNote.validated(
+          note: DiatonicNote.b,
+          octave: -2,
+          clef: Clef.bass,
+          accidental: Accidental.sharp,
+        ).midiNote,
+        const MidiNote(0),
+      );
+      expect(
         () => StaffNote.validated(
           note: DiatonicNote.c,
           octave: -1,
@@ -260,6 +269,14 @@ void main() {
           octave: 9,
           clef: Clef.treble,
           accidental: Accidental.sharp,
+        ),
+        throwsRangeError,
+      );
+      expect(
+        () => StaffNote.validated(
+          note: DiatonicNote.e,
+          octave: 1537228672809129305,
+          clef: Clef.treble,
         ),
         throwsRangeError,
       );

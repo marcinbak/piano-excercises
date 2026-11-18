@@ -10,7 +10,8 @@ final class StaffNote {
     required this.octave,
     required this.clef,
     this.accidental = Accidental.natural,
-  }) : // Dart const evaluation disallows reading enum fields (semitoneOffset /
+  }) : assert(octave >= -2 && octave <= 10),
+       // Dart const evaluation disallows reading enum fields (semitoneOffset /
        // semitoneDelta), so compute MIDI bounds via enum identity.
        assert(
          (((octave + 1) * 12) +

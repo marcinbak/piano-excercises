@@ -77,7 +77,7 @@ final class MidiNoteEvent {
   final String deviceId;
   final int timestampMs;
 
-  MidiNote get note => MidiNote(noteNumber);
+  MidiNote get note => MidiNote.fromNumber(noteNumber);
 
   String get noteName => formatMidiNoteName(noteNumber);
 
