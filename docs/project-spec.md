@@ -15,12 +15,14 @@ Replicate the core note-reading drill loop from [MusoPhone Exercise 7](https://m
 
 | Stage | Scope | Purpose |
 | --- | --- | --- |
-| 1 | Middle C (`C4`) only | Verify MIDI connection and basic response |
-| 2 | Additional C notes | Expand octave recognition from Middle C |
-| 3 | All treble and bass C notes | Anchor C positions across the grand staff |
-| 4 | Base landmark notes | Establish primary reference notes on both clefs |
-| 5 | Remaining natural notes | Fill gaps between landmark notes step by step |
+| 1 | `C4` on treble and bass clefs | Verify MIDI connection and basic response |
+| 2 | `+ C3` (bass), `C5` (treble) | Expand octave recognition from Middle C |
+| 3 | `+ C2` (bass), `C6` (treble) | Complete `C2..C6` anchors across the grand staff |
+| 4 | `+ F3` (bass), `G4` (treble) | Establish primary clef landmark notes |
+| 5 | `+` remaining naturals across bass `C2..B3` and treble `D4..C6` | Fill gaps between landmarks (max 2 ledger lines) |
 | 6+ | Accidentals, intervals, speed drills | Planned future expansion after core loop |
+
+Stage pools live in [progression_stage.dart](../lib/features/progression/domain/progression_stage.dart); default mastery criteria (`10` attempts, `90%` accuracy, `5` streak) live in [progression_rules.dart](../lib/features/progression/domain/progression_rules.dart).
 
 ## 4. Platform & Connectivity Requirements
 
