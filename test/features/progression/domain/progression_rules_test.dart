@@ -141,7 +141,7 @@ void main() {
     });
 
     test(
-      'unlocks sequentially from stage 1 through stage 5 and caps at stage 5',
+      'unlocks sequentially from stage 1 through stage 4 and caps at stage 4',
       () {
         var snapshot = ProgressionSnapshot.initial(
           criteria: const StageMasteryCriteria(
@@ -157,8 +157,8 @@ void main() {
           snapshot = snapshot.recordAttempt(correct: true, autoAdvance: true);
         }
 
-        expect(snapshot.highestUnlockedStageId, StageId.stage5);
-        expect(snapshot.activeStageId, StageId.stage5);
+        expect(snapshot.highestUnlockedStageId, StageId.stage4);
+        expect(snapshot.activeStageId, StageId.stage4);
         for (final stageId in StageId.values) {
           expect(snapshot.isUnlocked(stageId), isTrue);
           expect(snapshot.statsFor(stageId).attempts, 2);

@@ -128,12 +128,17 @@ void main() {
         find.byKey(const ValueKey<String>('drill-reset-button')),
         findsOneWidget,
       );
-      for (var stage = 1; stage <= 5; stage += 1) {
-        expect(
-          find.byKey(ValueKey<String>('drill-stage-chip-$stage')),
-          findsOneWidget,
+      for (var stage = 1; stage <= 4; stage += 1) {
+        final chipFinder = find.byKey(
+          ValueKey<String>('drill-stage-chip-$stage'),
         );
+        expect(chipFinder, findsOneWidget);
+        expect(tester.widget<ChoiceChip>(chipFinder).showCheckmark, isFalse);
       }
+      expect(
+        find.byKey(const ValueKey<String>('drill-stage-chip-5')),
+        findsNothing,
+      );
 
       // Target note C4 must NEVER appear in visible text before solving.
       expect(find.textContaining('C4'), findsNothing);
@@ -232,7 +237,7 @@ void main() {
   );
 
   testWidgets(
-    'stage chips switch active stage, status shows device name, and midi button navigates to MidiSpikeScreen',
+    'stage chips switch active stage, status shows device name, and midi button pauses drill while on MidiConnectionScreen',
     (tester) async {
       const piano = MidiDeviceInfo(
         id: 'ble-1',
@@ -246,7 +251,10 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [midiRepositoryProvider.overrideWithValue(repository)],
+          overrides: [
+            midiRepositoryProvider.overrideWithValue(repository),
+            drillRandomIntProvider.overrideWithValue((_) => 0),
+          ],
           child: const MaterialApp(home: DrillScreen()),
         ),
       );
@@ -255,11 +263,10 @@ void main() {
       expect(find.text('Connected (FP-30X)'), findsOneWidget);
 
       const expectedStages = <(int, String)>[
-        (2, 'Stage 2: Additional Cs'),
-        (3, 'Stage 3: All Treble & Bass Cs'),
-        (4, 'Stage 4: Base Landmark Notes'),
-        (5, 'Stage 5: All Natural Notes'),
-        (1, 'Stage 1: Middle C'),
+        (2, 'Stage 2: All Treble & Bass Cs'),
+        (3, 'Stage 3: Base Landmark Notes'),
+        (4, 'Stage 4: All Natural Notes'),
+        (1, 'Stage 1: Core Cs'),
       ];
       for (final (number, header) in expectedStages) {
         await tester.tap(
@@ -273,11 +280,34 @@ void main() {
         find.byKey(const ValueKey<String>('midi-status-button')),
       );
       await tester.pumpAndSettle();
-      expect(find.text('BLE-MIDI Spike'), findsOneWidget);
+      expect(find.text('BLE-MIDI Connection'), findsOneWidget);
+
+      // Notes played on MidiConnectionScreen verify input without altering drill stats.
+      repository.noteEventsController.add(_noteOn(61));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      repository.noteEventsController.add(_noteOff(61));
+      await tester.pump();
+      expect(find.text('C#4'), findsOneWidget);
 
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(find.text('Sight-Reading Drill'), findsOneWidget);
+      expect(_findStaffPainter(tester).wrongPlayedNotes, isEmpty);
+      expect(find.text('0%'), findsOneWidget);
+      expect(
+        find.text('Play the note shown on the grand staff via BLE-MIDI.'),
+        findsOneWidget,
+      );
+
+      // Resumes cleanly on pop: clean C4 hit registers normally.
+      repository.noteEventsController.add(_noteOn(60));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 35));
+      repository.noteEventsController.add(_noteOff(60));
+      await tester.pump();
+      expect(find.textContaining('Correct: C4'), findsOneWidget);
+      expect(find.text('100%'), findsOneWidget);
     },
   );
 
@@ -525,4 +555,73 @@ void main() {
       picture.dispose();
     },
   );
+
+  testWidgets(
+    'rapid double-tap on midi-status-button pushes only one MidiConnectionScreen route and stays paused until popped',
+    (tester) async {
+      final repository = _FakeMidiRepository();
+      addTearDown(repository.dispose);
+      final observer = _PushCountingObserver();
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            midiRepositoryProvider.overrideWithValue(repository),
+            drillRandomIntProvider.overrideWithValue((_) => 0),
+          ],
+          child: MaterialApp(
+            navigatorObservers: <NavigatorObserver>[observer],
+            home: const DrillScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(observer.pushCount, 1);
+
+      final statusButton = find.byKey(
+        const ValueKey<String>('midi-status-button'),
+      );
+      await tester.tap(statusButton);
+      await tester.tap(statusButton);
+      await tester.pumpAndSettle();
+
+      // Home route (1) + single MidiConnectionScreen route (2).
+      expect(observer.pushCount, 2);
+      expect(find.byType(MidiConnectionScreen), findsOneWidget);
+
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(MidiConnectionScreen)),
+      );
+      expect(container.read(drillControllerProvider.notifier).isPaused, isTrue);
+
+      // MIDI input played while open must not mutate DrillController state.
+      repository.noteEventsController.add(_noteOn(61));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      repository.noteEventsController.add(_noteOff(61));
+      await tester.pump();
+      expect(find.text('C#4'), findsOneWidget);
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MidiConnectionScreen), findsNothing);
+      expect(
+        container.read(drillControllerProvider.notifier).isPaused,
+        isFalse,
+      );
+      expect(_findStaffPainter(tester).wrongPlayedNotes, isEmpty);
+      expect(find.text('0%'), findsOneWidget);
+    },
+  );
+}
+
+final class _PushCountingObserver extends NavigatorObserver {
+  int pushCount = 0;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushCount += 1;
+    super.didPush(route, previousRoute);
+  }
 }

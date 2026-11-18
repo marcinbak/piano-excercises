@@ -77,7 +77,7 @@ final class MidiNoteLogEntry {
   int get hashCode => Object.hash(sequence, event);
 }
 
-/// Collects recent Note On/Off events (newest first) for the spike monitor feed.
+/// Collects recent Note On/Off events (newest first) for the connection input check.
 class MidiNoteLogNotifier extends Notifier<List<MidiNoteLogEntry>> {
   static const int maxEntries = 30;
   int _nextSequence = 0;
@@ -199,8 +199,11 @@ class MidiScanController extends Notifier<MidiScanState> {
     state = state.copyWith(isScanning: true, clearErrorMessage: true);
     try {
       await _repository.startScan();
-      if (!ref.mounted || generation != _scanGeneration || !state.isScanning) {
-        if (!ref.mounted || !state.isScanning) {
+      if (!ref.mounted ||
+          generation != _scanGeneration ||
+          !_isScanActive ||
+          !state.isScanning) {
+        if (!ref.mounted || !_isScanActive || !state.isScanning) {
           _isScanActive = false;
           await _stopScanSafely();
         }
@@ -235,6 +238,23 @@ class MidiScanController extends Notifier<MidiScanState> {
     }
   }
 
+  /// Stops an active scan when leaving the connection screen without mutating
+  /// provider state synchronously during widget-tree disposal.
+  void stopScanIfActive() {
+    if (!_isScanActive) {
+      return;
+    }
+    _scanGeneration += 1;
+    _isScanActive = false;
+    unawaited(_stopScanSafely());
+    Future<void>.microtask(() {
+      if (!ref.mounted) {
+        return;
+      }
+      state = state.copyWith(isScanning: false, clearErrorMessage: true);
+    });
+  }
+
   Future<void> _stopScanSafely() async {
     try {
       await _repository.stopScan();
@@ -245,10 +265,24 @@ class MidiScanController extends Notifier<MidiScanState> {
     if (state.connectingDeviceId != null) {
       return;
     }
-    state = state.copyWith(
-      connectingDeviceId: device.id,
-      clearErrorMessage: true,
-    );
+    if (state.isScanning || _isScanActive) {
+      _scanGeneration += 1;
+      _isScanActive = false;
+      state = state.copyWith(
+        isScanning: false,
+        connectingDeviceId: device.id,
+        clearErrorMessage: true,
+      );
+      await _stopScanSafely();
+      if (!ref.mounted) {
+        return;
+      }
+    } else {
+      state = state.copyWith(
+        connectingDeviceId: device.id,
+        clearErrorMessage: true,
+      );
+    }
     try {
       await _repository.connect(device);
       if (!ref.mounted) {

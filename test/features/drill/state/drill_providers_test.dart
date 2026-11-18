@@ -365,10 +365,10 @@ void main() {
         await repository.dispose();
       });
 
-      // Jump to Stage 4 so Stage has C4, C3, C5, C2, C6, F3, G4.
+      // Jump to Stage 3 so Stage has C4, C3, C5, C2, C6, F3, G4.
       container
           .read(progressionControllerProvider.notifier)
-          .selectStage(StageId.stage4);
+          .selectStage(StageId.stage3);
       final drillSub = container.listen(drillControllerProvider, (_, _) {});
       addTearDown(drillSub.close);
 
@@ -522,5 +522,122 @@ void main() {
     expect(progSub.read().activeStageId, StageId.stage1);
     expect(progSub.read().statsByStage, isEmpty);
     expect(drillSub.read().lastResult, isNull);
+  });
+
+  testWidgets(
+    'setPaused ignores NoteOn, cancels pending chord timer, and carries held keys across pause/resume without phantom chords',
+    (tester) async {
+      final repository = _FakeMidiRepository();
+      var nowMs = 0;
+      final container = ProviderContainer(
+        overrides: [
+          midiRepositoryProvider.overrideWithValue(repository),
+          drillRandomIntProvider.overrideWithValue((_) => 0),
+          drillClockMsProvider.overrideWithValue(() => nowMs),
+        ],
+      );
+      addTearDown(() async {
+        container.dispose();
+        await repository.dispose();
+      });
+
+      final drillSub = container.listen(drillControllerProvider, (_, _) {});
+      final progSub = container.listen(
+        progressionControllerProvider,
+        (_, _) {},
+      );
+      addTearDown(drillSub.close);
+      addTearDown(progSub.close);
+
+      final drillController = container.read(drillControllerProvider.notifier);
+      expect(drillController.isPaused, isFalse);
+
+      // Start a pending 35ms timer for E4 (64), then pause before it flushes.
+      nowMs = 100;
+      repository.noteEventsController.add(
+        _noteEvent(noteNumber: 64, isNoteOn: true),
+      );
+      await tester.pump();
+      drillController.setPaused(true);
+      expect(drillController.isPaused, isTrue);
+
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(drillSub.read().lastResult, isNull);
+      expect(progSub.read().statsFor(StageId.stage1).attempts, 0);
+
+      // While paused, play D4 (62) (on + off) and press G4 (67) (kept held).
+      repository.noteEventsController.add(
+        _noteEvent(noteNumber: 62, isNoteOn: true),
+      );
+      repository.noteEventsController.add(
+        _noteEvent(noteNumber: 62, isNoteOn: false),
+      );
+      repository.noteEventsController.add(
+        _noteEvent(noteNumber: 67, isNoteOn: true),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(drillSub.read().lastResult, isNull);
+      expect(progSub.read().statsFor(StageId.stage1).attempts, 0);
+
+      // Resume while E4 (64) and G4 (67) are still physically held.
+      drillController.setPaused(false);
+      expect(drillController.isPaused, isFalse);
+
+      // Playing target C4 (60) evaluates as clean single note, NOT a chord!
+      nowMs = 300;
+      repository.noteEventsController.add(
+        _noteEvent(noteNumber: 60, isNoteOn: true),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 35));
+
+      expect(drillSub.read().lastResult?.status, DrillFeedbackStatus.correct);
+      expect(drillSub.read().lastResult?.wasCleanFirstTry, isTrue);
+      expect(drillSub.read().lastResult?.playedNotes, const <MidiNote>[
+        MidiNote(60),
+      ]);
+      expect(progSub.read().statsFor(StageId.stage1).attempts, 1);
+      expect(progSub.read().statsFor(StageId.stage1).currentStreak, 1);
+
+      // Release G4 during another pause, then resume and play G4 cleanly.
+      drillController.setPaused(true);
+      repository.noteEventsController.add(
+        _noteEvent(noteNumber: 67, isNoteOn: false),
+      );
+      await tester.pump();
+      drillController.setPaused(false);
+    },
+  );
+
+  testWidgets('starts initial prompt from hydrated activeStage', (
+    tester,
+  ) async {
+    final midiRepository = _FakeMidiRepository();
+    final progressionRepository = InMemoryProgressionRepository();
+    await progressionRepository.save(
+      ProgressionSnapshot(
+        activeStageId: StageId.stage3,
+        highestUnlockedStageId: StageId.stage3,
+      ),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        midiRepositoryProvider.overrideWithValue(midiRepository),
+        progressionRepositoryProvider.overrideWithValue(progressionRepository),
+        drillRandomIntProvider.overrideWithValue((max) => max - 1),
+      ],
+    );
+    addTearDown(() async {
+      container.dispose();
+      await midiRepository.dispose();
+    });
+
+    final drillState = container.read(drillControllerProvider);
+    // Last note in Stage 3 cumulative pool is G4 treble (introduced in Stage 3).
+    expect(
+      drillState.targetNote,
+      const StaffNote(note: DiatonicNote.g, octave: 4, clef: Clef.treble),
+    );
   });
 }

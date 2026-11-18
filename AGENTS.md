@@ -45,9 +45,9 @@ Before calling work done: format check, lint & typecheck, size gate, and test pa
 One line per pitfall, grouped by area; full write-ups live in `docs/pitfalls/<area>.md`. Read the relevant file before working in that area.
 
 - **BLE-MIDI:** Call `stopScanningForBluetoothDevices()` on Bluetooth power-off and timeout `waitUntilBluetoothIsInitialized()` — see [docs/pitfalls/ble-midi.md](docs/pitfalls/ble-midi.md).
-- **iOS:** Physical device deployment requires Xcode Apple Developer signing beyond `--no-codesign` — see [docs/pitfalls/ios.md](docs/pitfalls/ios.md).
-- **Riverpod:** Subscribe directly to `MidiRepository.noteEventsStream` in `Notifier.build()` instead of `StreamProvider` — see [docs/pitfalls/riverpod.md](docs/pitfalls/riverpod.md).
-- **UI & SMuFL:** Align `Bravura` `TextPainter` glyphs via alphabetic baseline and call `dispose()` — see [docs/pitfalls/ui.md](docs/pitfalls/ui.md).
+- **iOS:** Physical device deployment requires Xcode signing beyond `--no-codesign` and `--profile`/`--release` AOT builds for untethered launches — see [docs/pitfalls/ios.md](docs/pitfalls/ios.md).
+- **Riverpod:** Subscribe directly to `MidiRepository.noteEventsStream` in `Notifier.build()` and defer `state` updates in `dispose()` — see [docs/pitfalls/riverpod.md](docs/pitfalls/riverpod.md).
+- **UI & SMuFL:** Align `Bravura` `TextPainter` glyphs via alphabetic baseline, call `dispose()`, and set `ChoiceChip.showCheckmark: false` with `avatar` — see [docs/pitfalls/ui.md](docs/pitfalls/ui.md).
 
 ## Continuous documentation
 

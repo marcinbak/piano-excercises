@@ -40,6 +40,9 @@ class DrillController extends Notifier<DrillSessionState> {
   int? _pendingAttemptStartedAtMs;
   Timer? _coalesceTimer;
   bool _isResetting = false;
+  bool _isPaused = false;
+
+  bool get isPaused => _isPaused;
 
   @override
   DrillSessionState build() {
@@ -49,6 +52,7 @@ class DrillController extends Notifier<DrillSessionState> {
     _heldByDevice.clear();
     _knownConnectedDeviceIds.clear();
     _isResetting = false;
+    _isPaused = false;
 
     _selector = NotePromptSelector(nextInt: ref.watch(drillRandomIntProvider));
     _clockMs = ref.watch(drillClockMsProvider);
@@ -93,6 +97,25 @@ class DrillController extends Notifier<DrillSessionState> {
     );
   }
 
+  /// Pauses or resumes prompt evaluation while preserving held-key tracking.
+  void setPaused(bool paused) {
+    if (!ref.mounted || paused == _isPaused) {
+      return;
+    }
+    if (paused) {
+      _isPaused = true;
+      _cancelPendingAttempt();
+      _carryoverHeldNotes.addAll(_promptHeldNotes);
+      _promptHeldNotes.clear();
+      return;
+    }
+    _isPaused = false;
+    _promptHeldNotes.clear();
+    for (final held in _heldByDevice.values) {
+      _carryoverHeldNotes.addAll(held);
+    }
+  }
+
   /// Resets drill progression to Stage 1 and starts a clean prompt.
   void resetSession() {
     _cancelPendingAttempt();
@@ -132,6 +155,10 @@ class DrillController extends Notifier<DrillSessionState> {
     final note = event.note;
     if (event.isNoteOn) {
       _heldByDevice.putIfAbsent(event.deviceId, () => <MidiNote>{}).add(note);
+      if (_isPaused) {
+        _carryoverHeldNotes.add(note);
+        return;
+      }
       _carryoverHeldNotes.remove(note);
       _promptHeldNotes.add(note);
 

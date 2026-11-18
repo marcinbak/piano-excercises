@@ -35,7 +35,7 @@ Project facts for the `dev-workflow` skill. The skill owns the process; this fil
 | unit test | `flutter test` | x | ✅ PR checks | Runs Dart unit and Flutter widget tests |
 | compile/bundle gate | `flutter build apk --debug` | | ✅ PR checks | Catches broken Android/Dart imports and packaging |
 | build artifact (iOS) | `flutter build ios --no-codesign` | | ✅ PR checks | Runs on `macos-latest` (`ios-build` job) |
-| install to device | none — not yet verified on physical hardware | | — | Physical iOS/Android phone needed once BLE-MIDI spike begins |
+| install to device | `flutter run --profile` (or `--release`) | | — | Physical iOS BLE-MIDI verified; untethered launches require AOT builds |
 | e2e | none — no E2E suite configured yet | | — | Revisit once drill UI and BLE-MIDI adapter exist |
 
 T0 set: `dart format --output=none --set-exit-if-changed .`, `flutter analyze --fatal-infos`, `python3 scripts/hotspots.py --repo . --check`, `flutter test`.
@@ -48,7 +48,7 @@ T0 set: `dart format --output=none --set-exit-if-changed .`, `flutter analyze --
 | dependency_install_rule | Run `flutter pub get` in each new worktree before `T0` |
 | device_acquisition | Manual physical iOS/Android device with BLE-MIDI keyboard (simulators lack BLE) |
 | build_flags | `--no-codesign` for un-signed iOS compile checks |
-| install_caveats | iOS requires `NSBluetoothAlwaysUsageDescription`; Android 12+ requires `BLUETOOTH_SCAN`/`BLUETOOTH_CONNECT` |
+| install_caveats | iOS requires `NSBluetoothAlwaysUsageDescription` and `--profile`/`--release` for untethered runs; Android 12+ requires `BLUETOOTH_SCAN`/`BLUETOOTH_CONNECT` |
 | device_automation | none — no automation harness configured yet |
 | design_tool | none — no external design tool linked |
 | design_link_location | none — UI scope defined in [docs/project-spec.md](project-spec.md) |

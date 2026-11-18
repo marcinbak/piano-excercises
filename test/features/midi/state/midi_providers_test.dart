@@ -23,6 +23,7 @@ class _FakeMidiRepository implements MidiRepository {
 
   int startScanCalls = 0;
   int stopScanCalls = 0;
+  final List<String> callOrder = <String>[];
 
   @override
   Stream<List<MidiDeviceInfo>> get devicesStream => devicesController.stream;
@@ -43,6 +44,7 @@ class _FakeMidiRepository implements MidiRepository {
   @override
   Future<void> startScan() async {
     startScanCalls += 1;
+    callOrder.add('startScan');
     if (onStartScan != null) {
       await onStartScan!();
     }
@@ -54,6 +56,7 @@ class _FakeMidiRepository implements MidiRepository {
   @override
   Future<void> stopScan() async {
     stopScanCalls += 1;
+    callOrder.add('stopScan');
     if (stopScanError != null) {
       throw stopScanError!;
     }
@@ -61,6 +64,7 @@ class _FakeMidiRepository implements MidiRepository {
 
   @override
   Future<void> connect(MidiDeviceInfo device) async {
+    callOrder.add('connect:${device.id}');
     if (onConnect != null) {
       await onConnect!(device);
     }
@@ -296,6 +300,94 @@ void main() {
 
       expect(sub.read().isScanning, isFalse);
       expect(sub.read().errorMessage, 'Bluetooth is turned off.');
+      sub.close();
+    },
+  );
+
+  test('connect stops an active scan before connecting', () async {
+    const device = MidiDeviceInfo(
+      id: 'ble-1',
+      name: 'FP-30X',
+      typeLabel: 'BLE',
+      isConnected: false,
+    );
+    final sub = container.listen(midiScanControllerProvider, (_, _) {});
+    final controller = container.read(midiScanControllerProvider.notifier);
+
+    await controller.startScan();
+    expect(sub.read().isScanning, isTrue);
+
+    await controller.connect(device);
+    expect(sub.read().isScanning, isFalse);
+    expect(sub.read().connectingDeviceId, isNull);
+    expect(repository.callOrder, const <String>[
+      'startScan',
+      'stopScan',
+      'connect:ble-1',
+    ]);
+    sub.close();
+  });
+
+  test('late completion of superseded startScan does not stop a newer active scan', () async {
+    final pendingStart1 = Completer<void>();
+    var callCount = 0;
+    repository.onStartScan = () {
+      callCount += 1;
+      if (callCount == 1) {
+        return pendingStart1.future;
+      }
+      return Future<void>.value();
+    };
+
+    final sub = container.listen(midiScanControllerProvider, (_, _) {});
+    final controller = container.read(midiScanControllerProvider.notifier);
+
+    final scan1Future = controller.startScan();
+    expect(sub.read().isScanning, isTrue);
+
+    await controller.stopScan();
+    expect(sub.read().isScanning, isFalse);
+    expect(repository.stopScanCalls, 1);
+
+    await controller.startScan();
+    expect(sub.read().isScanning, isTrue);
+    expect(repository.startScanCalls, 2);
+
+    // Scan #1 resolves after Scan #2 is active: Scan #2 must NOT be stopped.
+    pendingStart1.complete();
+    await scan1Future;
+    expect(sub.read().isScanning, isTrue);
+    expect(repository.stopScanCalls, 1);
+
+    // Stopping Scan #2 afterwards still invokes repository.stopScan() cleanly.
+    await controller.stopScan();
+    expect(sub.read().isScanning, isFalse);
+    expect(repository.stopScanCalls, 2);
+    sub.close();
+  });
+
+  test(
+    'stopScanIfActive stops a late-resolving in-flight startScan cleanly',
+    () async {
+      final pendingStart = Completer<void>();
+      repository.onStartScan = () => pendingStart.future;
+
+      final sub = container.listen(midiScanControllerProvider, (_, _) {});
+      final controller = container.read(midiScanControllerProvider.notifier);
+
+      final scanFuture = controller.startScan();
+      expect(sub.read().isScanning, isTrue);
+      expect(repository.startScanCalls, 1);
+
+      controller.stopScanIfActive();
+      expect(repository.stopScanCalls, 1);
+
+      pendingStart.complete();
+      await scanFuture;
+      await Future<void>.delayed(Duration.zero);
+
+      expect(sub.read().isScanning, isFalse);
+      expect(repository.stopScanCalls, 2);
       sub.close();
     },
   );

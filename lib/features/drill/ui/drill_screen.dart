@@ -31,13 +31,7 @@ class DrillScreen extends ConsumerWidget {
           TextButton.icon(
             key: const ValueKey<String>('midi-status-button'),
             onPressed: () {
-              unawaited(
-                Navigator.of(context).push<void>(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const MidiSpikeScreen(),
-                  ),
-                ),
-              );
+              unawaited(_openMidiConnectionScreen(context, ref));
             },
             icon: Icon(
               connectedDevices.isEmpty
@@ -99,5 +93,23 @@ class DrillScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _openMidiConnectionScreen(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    final drillController = ref.read(drillControllerProvider.notifier);
+    if (drillController.isPaused) {
+      return;
+    }
+    drillController.setPaused(true);
+    try {
+      await Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const MidiConnectionScreen()),
+      );
+    } finally {
+      drillController.setPaused(false);
+    }
   }
 }

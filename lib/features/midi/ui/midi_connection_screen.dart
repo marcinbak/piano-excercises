@@ -6,66 +6,129 @@ import 'package:piano_exercises/features/midi/domain/midi_device_info.dart';
 import 'package:piano_exercises/features/midi/domain/midi_repository.dart';
 import 'package:piano_exercises/features/midi/state/midi_providers.dart';
 import 'package:piano_exercises/features/midi/ui/midi_device_tile.dart';
-import 'package:piano_exercises/features/midi/ui/midi_note_log_section.dart';
+import 'package:piano_exercises/features/midi/ui/midi_input_check_card.dart';
 
-/// Diagnostic screen for Milestone 1 BLE-MIDI discovery, connection, and note input.
-class MidiSpikeScreen extends ConsumerWidget {
-  const MidiSpikeScreen({super.key});
+/// Production BLE-MIDI discovery, device pairing, and live input-check screen.
+class MidiConnectionScreen extends ConsumerStatefulWidget {
+  const MidiConnectionScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MidiConnectionScreen> createState() =>
+      _MidiConnectionScreenState();
+}
+
+class _MidiConnectionScreenState extends ConsumerState<MidiConnectionScreen> {
+  MidiScanController? _scanController;
+
+  @override
+  void initState() {
+    super.initState();
+    _scanController = ref.read(midiScanControllerProvider.notifier);
+  }
+
+  @override
+  void dispose() {
+    _scanController?.stopScanIfActive();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final bluetoothAsync = ref.watch(midiBluetoothStatusProvider);
     final devicesAsync = ref.watch(midiDevicesProvider);
     final scanState = ref.watch(midiScanControllerProvider);
     final noteLog = ref.watch(midiNoteLogProvider);
     final controller = ref.read(midiScanControllerProvider.notifier);
+    _scanController = controller;
 
     final btStatus = bluetoothAsync.value ?? MidiBluetoothStatus.unknown;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('BLE-MIDI Spike')),
+      appBar: AppBar(title: const Text('BLE-MIDI Connection')),
       body: SafeArea(
-        child: Padding(
+        child: ListView(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              _ControlBar(
-                bluetoothStatus: btStatus,
-                isScanning: scanState.isScanning,
-                onStartScan: () => unawaited(controller.startScan()),
-                onStopScan: () => unawaited(controller.stopScan()),
-              ),
-              if (scanState.errorMessage != null) ...<Widget>[
-                const SizedBox(height: 12),
-                _ErrorBanner(
-                  message: scanState.errorMessage!,
-                  onDismiss: controller.dismissError,
-                ),
-              ],
-              const SizedBox(height: 16),
-              Expanded(
-                flex: 2,
-                child: _DevicesSection(
-                  devicesAsync: devicesAsync,
-                  connectingDeviceId: scanState.connectingDeviceId,
-                  onConnect: (device) => unawaited(controller.connect(device)),
-                  onDisconnect: (device) =>
-                      unawaited(controller.disconnect(device)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                flex: 3,
-                child: MidiNoteLogSection(
-                  entries: noteLog,
-                  onClear: ref.read(midiNoteLogProvider.notifier).clear,
-                ),
+          children: <Widget>[
+            _ControlBar(
+              bluetoothStatus: btStatus,
+              isScanning: scanState.isScanning,
+              onStartScan: () => unawaited(controller.startScan()),
+              onStopScan: () => unawaited(controller.stopScan()),
+            ),
+            if (scanState.errorMessage != null) ...<Widget>[
+              const SizedBox(height: 12),
+              _ErrorBanner(
+                message: scanState.errorMessage!,
+                onDismiss: controller.dismissError,
               ),
             ],
-          ),
+            const SizedBox(height: 16),
+            Text(
+              'MIDI Devices',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            ..._buildDeviceEntries(
+              devicesAsync: devicesAsync,
+              connectingDeviceId: scanState.connectingDeviceId,
+              onConnect: (device) => unawaited(controller.connect(device)),
+              onDisconnect: (device) =>
+                  unawaited(controller.disconnect(device)),
+            ),
+            const SizedBox(height: 16),
+            MidiInputCheckCard(
+              latestEvent: noteLog.isEmpty ? null : noteLog.first.event,
+              onClear: ref.read(midiNoteLogProvider.notifier).clear,
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  List<Widget> _buildDeviceEntries({
+    required AsyncValue<List<MidiDeviceInfo>> devicesAsync,
+    required String? connectingDeviceId,
+    required ValueChanged<MidiDeviceInfo> onConnect,
+    required ValueChanged<MidiDeviceInfo> onDisconnect,
+  }) {
+    return devicesAsync.when(
+      loading: () => const <Widget>[
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ],
+      error: (error, _) => <Widget>[
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Center(child: Text('Could not load MIDI devices: $error')),
+        ),
+      ],
+      data: (devices) {
+        if (devices.isEmpty) {
+          return const <Widget>[
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text(
+                  'No MIDI devices found.\nTurn on your BLE-MIDI piano and tap Scan.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ];
+        }
+        return <Widget>[
+          for (final device in devices)
+            MidiDeviceTile(
+              device: device,
+              isBusyConnecting: connectingDeviceId == device.id,
+              onConnect: () => onConnect(device),
+              onDisconnect: () => onDisconnect(device),
+            ),
+        ];
+      },
     );
   }
 }
@@ -85,10 +148,13 @@ class _ControlBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Wrap(
+      spacing: 12,
+      runSpacing: 8,
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: <Widget>[
         _BluetoothStatusPill(status: bluetoothStatus),
-        const Spacer(),
         if (isScanning)
           OutlinedButton.icon(
             onPressed: onStopScan,
@@ -158,9 +224,12 @@ class _BluetoothStatusPill extends StatelessWidget {
         children: <Widget>[
           Icon(icon, size: 18, color: fg),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(color: fg),
+          Flexible(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge
+                  ?.copyWith(color: fg),
+            ),
           ),
         ],
       ),
@@ -200,60 +269,6 @@ class _ErrorBanner extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _DevicesSection extends StatelessWidget {
-  const _DevicesSection({
-    required this.devicesAsync,
-    required this.connectingDeviceId,
-    required this.onConnect,
-    required this.onDisconnect,
-  });
-
-  final AsyncValue<List<MidiDeviceInfo>> devicesAsync;
-  final String? connectingDeviceId;
-  final ValueChanged<MidiDeviceInfo> onConnect;
-  final ValueChanged<MidiDeviceInfo> onDisconnect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text('MIDI Devices', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Expanded(
-          child: devicesAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) =>
-                Center(child: Text('Could not load MIDI devices: $error')),
-            data: (devices) {
-              if (devices.isEmpty) {
-                return const Center(
-                  child: Text(
-                    'No MIDI devices found.\nTurn on your BLE-MIDI piano and tap Scan.',
-                    textAlign: TextAlign.center,
-                  ),
-                );
-              }
-              return ListView.builder(
-                itemCount: devices.length,
-                itemBuilder: (context, index) {
-                  final device = devices[index];
-                  return MidiDeviceTile(
-                    device: device,
-                    isBusyConnecting: connectingDeviceId == device.id,
-                    onConnect: () => onConnect(device),
-                    onDisconnect: () => onDisconnect(device),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
     );
   }
 }
