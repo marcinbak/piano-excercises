@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:piano_exercises/features/drill/drill.dart';
 import 'package:piano_exercises/features/midi/midi.dart';
 
 /// Root widget configuring dependency overrides for the application.
@@ -36,7 +37,7 @@ class PianoExercisesApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
       ),
-      home: const MidiSpikeScreen(),
+      home: const DrillScreen(),
     );
   }
 }

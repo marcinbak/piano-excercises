@@ -14,4 +14,6 @@ export 'state/midi_providers.dart'
         midiNoteLogProvider,
         midiRepositoryProvider,
         midiScanControllerProvider;
+export 'state/midi_session_providers.dart'
+    show connectedMidiDevicesProvider, midiNoteEventsProvider;
 export 'ui/midi_spike_screen.dart' show MidiSpikeScreen;
