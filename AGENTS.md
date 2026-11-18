@@ -46,6 +46,8 @@ One line per pitfall, grouped by area; full write-ups live in `docs/pitfalls/<ar
 
 - **BLE-MIDI:** Call `stopScanningForBluetoothDevices()` on Bluetooth power-off and timeout `waitUntilBluetoothIsInitialized()` — see [docs/pitfalls/ble-midi.md](docs/pitfalls/ble-midi.md).
 - **iOS:** Physical device deployment requires Xcode Apple Developer signing beyond `--no-codesign` — see [docs/pitfalls/ios.md](docs/pitfalls/ios.md).
+- **Riverpod:** Subscribe directly to `MidiRepository.noteEventsStream` in `Notifier.build()` instead of `StreamProvider` — see [docs/pitfalls/riverpod.md](docs/pitfalls/riverpod.md).
+- **UI & SMuFL:** Align `Bravura` `TextPainter` glyphs via alphabetic baseline and call `dispose()` — see [docs/pitfalls/ui.md](docs/pitfalls/ui.md).
 
 ## Continuous documentation
 

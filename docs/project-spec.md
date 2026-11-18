@@ -6,10 +6,11 @@ Replicate the core note-reading drill loop from [MusoPhone Exercise 7](https://m
 
 ## 2. Core Drill Loop
 
-1. App displays a target note on a musical staff (treble, bass, or grand staff).
+1. App renders a target note on the `Bravura` grand staff in [DrillScreen](../lib/features/drill/ui/drill_screen.dart).
 2. User plays a key on a Bluetooth LE MIDI piano.
-3. App reads incoming MIDI Note On events and checks pitch and octave against the target note.
-4. App gives immediate right/wrong feedback, records speed/accuracy, and presents the next note.
+3. App coalesces simultaneous Note On events (`35ms`) and checks single-note pitch and octave against the target.
+4. Clean hits advance the prompt and increment streak; mistakes reset streak, hold the target, and draw red wrong notes.
+5. Clearing a missed prompt advances to the next note without incrementing streak.
 
 ## 3. Difficulty Progression
 
