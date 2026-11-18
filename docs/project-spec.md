@@ -6,10 +6,11 @@ Replicate the core note-reading drill loop from [MusoPhone Exercise 7](https://m
 
 ## 2. Core Drill Loop
 
-1. App displays a target note on a musical staff (treble, bass, or grand staff).
+1. App renders a target note on the `Bravura` grand staff in [DrillScreen](../lib/features/drill/ui/drill_screen.dart).
 2. User plays a key on a Bluetooth LE MIDI piano.
-3. App reads incoming MIDI Note On events and checks pitch and octave against the target note.
-4. App gives immediate right/wrong feedback, records speed/accuracy, and presents the next note.
+3. App coalesces simultaneous Note On events (`35ms`) and checks single-note pitch and octave against the target.
+4. Clean hits advance the prompt and increment streak; mistakes reset streak, hold the target, and draw red wrong notes.
+5. Clearing a missed prompt advances to the next note without incrementing streak.
 
 ## 3. Difficulty Progression
 
@@ -35,7 +36,7 @@ Stage pools live in [progression_stage.dart](../lib/features/progression/domain/
 
 ## 5. Open Decisions
 
-- **BLE-MIDI & Staff Packages:** Integrated `flutter_midi_command` + `flutter_midi_command_ble` in [MidiSpikeScreen](../lib/features/midi/ui/midi_spike_screen.dart); physical hardware test and SMuFL renderer selection remain open.
+- **BLE-MIDI & Staff Packages:** Integrated `flutter_midi_command` + `flutter_midi_command_ble` in [MidiSpikeScreen](../lib/features/midi/ui/midi_spike_screen.dart) and bundled `Bravura` SMuFL rendering in [DrillScreen](../lib/features/drill/ui/drill_screen.dart); physical BLE-MIDI hardware test remains open.
 - **Fallback Input:** Decide whether to include an on-screen piano or microphone pitch detection when no MIDI keyboard is connected.
 - **USB-MIDI:** Decide whether to support wired USB-MIDI alongside BLE-MIDI.
 - **Pre-Release Permission Check (Deferred):** Confirm permission with the creators/owners of [MusoPhone](https://musophone.com/tests-new/?exercise=7) before any public release; all credits go to them.
