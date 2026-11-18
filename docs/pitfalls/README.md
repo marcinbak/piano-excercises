@@ -6,8 +6,8 @@ Record non-obvious bugs, platform/BLE-MIDI quirks, and workflow workarounds here
 
 - [BLE-MIDI](ble-midi.md) — Bluetooth power-off scan state and initialization wait timeout.
 - [iOS](ios.md) — Physical device code signing and untethered AOT build requirements.
-- [Riverpod](riverpod.md) — `StreamProvider` coalescing of rapid MIDI events.
-- [UI & SMuFL](ui.md) — `Bravura` baseline alignment and `TextPainter` disposal.
+- [Riverpod](riverpod.md) — `StreamProvider` coalescing of rapid MIDI events and `dispose()` state mutation.
+- [UI & SMuFL](ui.md) — `Bravura` baseline alignment, `TextPainter` disposal, and `ChoiceChip` checkmarks.
 
 ## How to add a pitfall
 
