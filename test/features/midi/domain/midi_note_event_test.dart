@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:piano_exercises/features/midi/domain/midi_note_event.dart';
+import 'package:piano_exercises/shared/music/music.dart';
 
 void main() {
   group('formatMidiNoteName', () {
@@ -31,6 +32,7 @@ void main() {
       );
 
       expect(event.noteNumber, 60);
+      expect(event.note, MidiNote.middleC);
       expect(event.noteName, 'C4');
       expect(event.velocity, 96);
       expect(event.isNoteOn, isTrue);

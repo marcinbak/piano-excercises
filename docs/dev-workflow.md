@@ -65,7 +65,7 @@ Excluded flows and why: none.
 
 | Key | Value |
 |---|---|
-| merge_policy | manual |
+| merge_policy | auto |
 | announce_channel | none (personal repo) |
 | cc_resolution | none |
 | doc_update_targets | `README.md`, `AGENTS.md`, `docs/architecture.md`, `docs/project-spec.md`, `docs/pitfalls/` |

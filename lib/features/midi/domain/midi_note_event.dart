@@ -1,25 +1,8 @@
-const List<String> _pitchClasses = <String>[
-  'C',
-  'C#',
-  'D',
-  'D#',
-  'E',
-  'F',
-  'F#',
-  'G',
-  'G#',
-  'A',
-  'A#',
-  'B',
-];
+import 'package:piano_exercises/shared/music/music.dart';
 
 /// Formats a MIDI [noteNumber] (`0..127`) as scientific pitch notation (e.g. `60 -> C4`).
-String formatMidiNoteName(int noteNumber) {
-  RangeError.checkValueInInterval(noteNumber, 0, 127, 'noteNumber');
-  final pitchClass = _pitchClasses[noteNumber % 12];
-  final octave = (noteNumber ~/ 12) - 1;
-  return '$pitchClass$octave';
-}
+String formatMidiNoteName(int noteNumber) =>
+    MidiNote.fromNumber(noteNumber).name;
 
 /// Normalized MIDI Note On/Off event emitted by a connected MIDI device.
 final class MidiNoteEvent {
@@ -93,6 +76,8 @@ final class MidiNoteEvent {
   final int channel;
   final String deviceId;
   final int timestampMs;
+
+  MidiNote get note => MidiNote.fromNumber(noteNumber);
 
   String get noteName => formatMidiNoteName(noteNumber);
 
