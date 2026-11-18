@@ -1,4 +1,3 @@
-import 'package:piano_exercises/features/progression/progression.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
 /// Random integer source returning an integer in `0 ..< max`.
@@ -9,11 +8,6 @@ final class NotePromptSelector {
   const NotePromptSelector({required this.nextInt});
 
   final NextInt nextInt;
-
-  /// Picks the next [StaffNote] from [stage.cumulativeNotes].
-  StaffNote selectFromStage(ProgressionStage stage, {StaffNote? previous}) {
-    return selectFromPool(stage.cumulativeNotes, previous: previous);
-  }
 
   /// Picks the next [StaffNote] from [pool], avoiding [previous] when possible.
   StaffNote selectFromPool(List<StaffNote> pool, {StaffNote? previous}) {

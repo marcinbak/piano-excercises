@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/drill/drill.dart';
+import 'package:piano_exercises/features/drill/ui/grand_staff_layout.dart';
 import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
@@ -281,28 +282,139 @@ void main() {
   );
 
   testWidgets(
-    'lays out cleanly on narrow portrait and short landscape viewports',
+    'lays out cleanly across compact heights and 1.6x accessibility text scale',
+    (tester) async {
+      final repository = _FakeMidiRepository();
+      addTearDown(repository.dispose);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      for (final surfaceSize in const <Size>[
+        Size(360, 420),
+        Size(360, 640),
+        Size(780, 340),
+      ]) {
+        await tester.binding.setSurfaceSize(surfaceSize);
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [midiRepositoryProvider.overrideWithValue(repository)],
+            child: const MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(1.6)),
+              child: MaterialApp(home: DrillScreen()),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'Unexpected layout exception at $surfaceSize with 1.6x text',
+        );
+        final cardSize = tester.getSize(
+          find.byKey(const ValueKey<String>('grand-staff-card')),
+        );
+        expect(
+          cardSize.height,
+          greaterThanOrEqualTo(180),
+          reason: 'GrandStaffCard shrank below 180px at $surfaceSize',
+        );
+      }
+    },
+  );
+
+  testWidgets(
+    'renders adjacent sharps chord C#4 + D#4 through DrillScreen without collision',
     (tester) async {
       final repository = _FakeMidiRepository();
       addTearDown(repository.dispose);
 
-      await tester.binding.setSurfaceSize(const Size(360, 640));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [midiRepositoryProvider.overrideWithValue(repository)],
+          overrides: [
+            midiRepositoryProvider.overrideWithValue(repository),
+            drillRandomIntProvider.overrideWithValue((_) => 0),
+          ],
           child: const MaterialApp(home: DrillScreen()),
         ),
       );
       await tester.pump();
-      expect(tester.takeException(), isNull);
 
-      await tester.binding.setSurfaceSize(const Size(780, 340));
+      repository.noteEventsController.add(_noteOn(61));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 10));
+      repository.noteEventsController.add(_noteOn(63));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 25));
+
+      final painter = _findStaffPainter(tester);
+      expect(painter.wrongPlayedNotes, const <StaffNote>[
+        StaffNote(
+          note: DiatonicNote.c,
+          octave: 4,
+          clef: Clef.treble,
+          accidental: Accidental.sharp,
+        ),
+        StaffNote(
+          note: DiatonicNote.d,
+          octave: 4,
+          clef: Clef.treble,
+          accidental: Accidental.sharp,
+        ),
+      ]);
+      expect(
+        find.textContaining('Multiple notes played (C#4, D#4)'),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );
+
+  test('GrandStaffPainter separates C#4 + D#4 sharps into distinct non-overlapping columns', () {
+    const cSharp4 = StaffNote(
+      note: DiatonicNote.c,
+      octave: 4,
+      clef: Clef.treble,
+      accidental: Accidental.sharp,
+    );
+    const dSharp4 = StaffNote(
+      note: DiatonicNote.d,
+      octave: 4,
+      clef: Clef.treble,
+      accidental: Accidental.sharp,
+    );
+    final layout = GrandStaffLayout.fromSize(const Size(328, 240));
+    expect(layout.trebleBottomY, layout.trebleTopY + (4.0 * layout.staffSpace));
+    expect(
+      layout.bassBottomY,
+      layout.trebleBottomY + (9.0 * layout.staffSpace),
+    );
+    expect(layout.clefCenterX, layout.systemLeftX + (2.2 * layout.staffSpace));
+    expect(layout.wrongColumnX, layout.targetNoteX + (4.4 * layout.staffSpace));
+
+    final placements = GrandStaffPainter.computeWrongNotePlacements(
+      layout,
+      const <StaffNote>[cSharp4, dSharp4],
+    );
+    expect(placements, hasLength(2));
+
+    final lower = placements[0];
+    final upper = placements[1];
+    expect(lower.note, cSharp4);
+    expect(upper.note, dSharp4);
+    expect(lower.noteX, layout.wrongColumnX);
+    expect(upper.noteX, greaterThan(lower.noteX + (layout.noteWidth * 0.9)));
+    expect(lower.accidentalX, isNotNull);
+    expect(upper.accidentalX, isNotNull);
+    // Upper sharp sits in a secondary column strictly left of lower sharp and
+    // strictly clear of both C#4's notehead and the target notehead.
+    expect(
+      upper.accidentalX!,
+      lessThan(lower.accidentalX! - layout.staffSpace),
+    );
+    expect(
+      upper.accidentalX!,
+      greaterThan(layout.targetNoteX + (layout.noteWidth * 0.5)),
+    );
+  });
 
   test(
     'GrandStaffPainter handles extreme notes, seconds, and shouldRepaint',

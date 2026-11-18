@@ -36,7 +36,10 @@ void main() {
         for (final stage in ProgressionCatalog.stages) {
           StaffNote? previous;
           for (var i = 0; i < 100; i += 1) {
-            final next = selector.selectFromStage(stage, previous: previous);
+            final next = selector.selectFromPool(
+              stage.cumulativeNotes,
+              previous: previous,
+            );
             expect(stage.containsNote(next), isTrue);
             if (previous != null) {
               expect(

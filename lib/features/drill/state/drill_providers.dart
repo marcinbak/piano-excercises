@@ -88,7 +88,7 @@ class DrillController extends Notifier<DrillSessionState> {
 
     final initialStage = ref.read(progressionControllerProvider).activeStage;
     return DrillSessionState(
-      targetNote: _selector.selectFromStage(initialStage),
+      targetNote: _selector.selectFromPool(initialStage.cumulativeNotes),
       promptStartedAtMs: _clockMs(),
     );
   }
@@ -106,7 +106,7 @@ class DrillController extends Notifier<DrillSessionState> {
     }
     final stage1 = ProgressionCatalog.byId(StageId.stage1);
     state = DrillSessionState(
-      targetNote: _selector.selectFromStage(stage1),
+      targetNote: _selector.selectFromPool(stage1.cumulativeNotes),
       promptStartedAtMs: _clockMs(),
     );
   }
@@ -117,8 +117,8 @@ class DrillController extends Notifier<DrillSessionState> {
     _promptHeldNotes.clear();
     final nextStage = ProgressionCatalog.byId(nextStageId);
     state = DrillSessionState(
-      targetNote: _selector.selectFromStage(
-        nextStage,
+      targetNote: _selector.selectFromPool(
+        nextStage.cumulativeNotes,
         previous: state.targetNote,
       ),
       promptStartedAtMs: _clockMs(),
@@ -188,7 +188,10 @@ class DrillController extends Notifier<DrillSessionState> {
       evaluatedAtMs: _clockMs(),
       selectNextTarget: (previousTarget) {
         final activeStage = ref.read(progressionControllerProvider).activeStage;
-        return _selector.selectFromStage(activeStage, previous: previousTarget);
+        return _selector.selectFromPool(
+          activeStage.cumulativeNotes,
+          previous: previousTarget,
+        );
       },
     );
 

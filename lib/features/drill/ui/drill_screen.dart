@@ -59,59 +59,43 @@ class DrillScreen extends ConsumerWidget {
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final stageSelector = DrillStageSelector(
-                progression: progression,
-                onSelectStage: (stageId) => ref
-                    .read(progressionControllerProvider.notifier)
-                    .selectStage(stageId),
-              );
-              final statsBar = DrillStatsBar(
-                progression: progression,
-                lastResult: sessionState.lastResult,
-              );
-              final staffCard = GrandStaffCard(
-                targetNote: sessionState.targetNote,
-                wrongPlayedNotes: sessionState.wrongPlayedNotes,
-              );
-              final feedbackBanner = DrillFeedbackBanner(
-                lastResult: sessionState.lastResult,
-              );
-
-              if (constraints.maxHeight < 380) {
-                return SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: <Widget>[
-                      stageSelector,
-                      const SizedBox(height: 12),
-                      statsBar,
-                      const SizedBox(height: 12),
-                      SizedBox(height: 220, child: staffCard),
-                      const SizedBox(height: 12),
-                      feedbackBanner,
-                    ],
-                  ),
-                );
-              }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: <Widget>[
-                  stageSelector,
-                  const SizedBox(height: 12),
-                  statsBar,
-                  const SizedBox(height: 12),
-                  Expanded(child: staffCard),
-                  const SizedBox(height: 12),
-                  feedbackBanner,
-                ],
-              );
-            },
-          ),
+        child: CustomScrollView(
+          slivers: <Widget>[
+            SliverPadding(
+              padding: const EdgeInsets.all(16),
+              sliver: SliverFillRemaining(
+                hasScrollBody: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: <Widget>[
+                    DrillStageSelector(
+                      progression: progression,
+                      onSelectStage: (stageId) => ref
+                          .read(progressionControllerProvider.notifier)
+                          .selectStage(stageId),
+                    ),
+                    const SizedBox(height: 12),
+                    DrillStatsBar(
+                      progression: progression,
+                      lastResult: sessionState.lastResult,
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 200),
+                        child: GrandStaffCard(
+                          targetNote: sessionState.targetNote,
+                          wrongPlayedNotes: sessionState.wrongPlayedNotes,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DrillFeedbackBanner(lastResult: sessionState.lastResult),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

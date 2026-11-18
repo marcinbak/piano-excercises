@@ -107,8 +107,30 @@ class GrandStaffPainter extends CustomPainter {
   }
 
   void _paintWrongNotes(Canvas canvas, GrandStaffLayout layout, Size size) {
+    for (final placement in computeWrongNotePlacements(
+      layout,
+      wrongPlayedNotes,
+    )) {
+      _paintNote(
+        canvas,
+        layout,
+        size: size,
+        note: placement.note,
+        centerX: placement.noteX,
+        accidentalCenterX: placement.accidentalX,
+        color: errorColor,
+      );
+    }
+  }
+
+  /// Resolves horizontal notehead and accidental coordinates for wrong chords.
+  static List<({StaffNote note, double noteX, double? accidentalX})>
+  computeWrongNotePlacements(
+    GrandStaffLayout layout,
+    List<StaffNote> wrongPlayedNotes,
+  ) {
     if (wrongPlayedNotes.isEmpty) {
-      return;
+      return const <({StaffNote note, double noteX, double? accidentalX})>[];
     }
     final sorted = List<StaffNote>.of(wrongPlayedNotes)
       ..sort((a, b) {
@@ -120,6 +142,8 @@ class GrandStaffPainter extends CustomPainter {
             : a.diatonicStep.compareTo(b.diatonicStep);
       });
 
+    final placements =
+        <({StaffNote note, double noteX, double? accidentalX})>[];
     Clef? previousClef;
     var previousStep = 0;
     var previousShifted = false;
@@ -132,27 +156,26 @@ class GrandStaffPainter extends CustomPainter {
       final noteX = shiftRight
           ? layout.wrongColumnX + (layout.noteWidth * 0.95)
           : layout.wrongColumnX;
-      final accidentalX = shiftRight && !previousHasAccidental
-          ? layout.wrongColumnX -
-                (layout.noteWidth * 0.5) -
-                (layout.staffSpace * 0.75)
-          : null;
+      final double? accidentalX;
+      if (note.accidental == Accidental.natural) {
+        accidentalX = null;
+      } else if (shiftRight) {
+        accidentalX = layout.accidentalX(
+          layout.wrongColumnX,
+          column: previousHasAccidental ? 1 : 0,
+        );
+      } else {
+        accidentalX = layout.accidentalX(noteX);
+      }
 
-      _paintNote(
-        canvas,
-        layout,
-        size: size,
-        note: note,
-        centerX: noteX,
-        accidentalCenterX: accidentalX,
-        color: errorColor,
-      );
+      placements.add((note: note, noteX: noteX, accidentalX: accidentalX));
 
       previousClef = note.clef;
       previousStep = note.diatonicStep;
       previousShifted = shiftRight;
       previousHasAccidental = note.accidental != Accidental.natural;
     }
+    return placements;
   }
 
   void _paintNote(
@@ -246,9 +269,7 @@ class GrandStaffPainter extends CustomPainter {
     if (accidentalGlyph == null) {
       return;
     }
-    final accX =
-        accidentalCenterX ??
-        centerX - (layout.noteWidth * 0.5) - (layout.staffSpace * 0.75);
+    final accX = accidentalCenterX ?? layout.accidentalX(centerX);
     paintSmuflGlyph(
       canvas: canvas,
       glyph: accidentalGlyph,

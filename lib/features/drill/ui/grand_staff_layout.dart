@@ -5,16 +5,12 @@ import 'package:piano_exercises/shared/music/music.dart';
 
 /// Responsive staff coordinates and SMuFL rendering helpers for [GrandStaffPainter].
 final class GrandStaffLayout {
-  const GrandStaffLayout({
+  const GrandStaffLayout._({
     required this.staffSpace,
     required this.trebleTopY,
-    required this.trebleBottomY,
-    required this.bassBottomY,
     required this.systemLeftX,
     required this.systemRightX,
-    required this.clefCenterX,
     required this.targetNoteX,
-    required this.wrongColumnX,
   });
 
   factory GrandStaffLayout.fromSize(Size size) {
@@ -23,8 +19,6 @@ final class GrandStaffLayout {
     final staffSpace = math.min(maxFromHeight, maxFromWidth).clamp(2.0, 18.0);
 
     final trebleTopY = (size.height - (13.0 * staffSpace)) / 2;
-    final trebleBottomY = trebleTopY + (4.0 * staffSpace);
-    final bassBottomY = trebleBottomY + (9.0 * staffSpace);
 
     final contentWidth = math.min(
       size.width - (2.0 * staffSpace),
@@ -33,23 +27,18 @@ final class GrandStaffLayout {
     final leftEdge = (size.width - contentWidth) / 2;
     final systemLeftX = leftEdge + (1.60 * staffSpace);
     final systemRightX = leftEdge + contentWidth;
-    final clefCenterX = systemLeftX + (2.2 * staffSpace);
 
+    final clefCenterX = systemLeftX + (2.2 * staffSpace);
     final noteAreaStart = clefCenterX + (2.8 * staffSpace);
     final noteAreaEnd = systemRightX - (1.6 * staffSpace);
-    final targetNoteX = noteAreaStart + ((noteAreaEnd - noteAreaStart) * 0.35);
-    final wrongColumnX = targetNoteX + (staffSpace * 3.4);
+    final targetNoteX = noteAreaStart + ((noteAreaEnd - noteAreaStart) * 0.30);
 
-    return GrandStaffLayout(
+    return GrandStaffLayout._(
       staffSpace: staffSpace,
       trebleTopY: trebleTopY,
-      trebleBottomY: trebleBottomY,
-      bassBottomY: bassBottomY,
       systemLeftX: systemLeftX,
       systemRightX: systemRightX,
-      clefCenterX: clefCenterX,
       targetNoteX: targetNoteX,
-      wrongColumnX: wrongColumnX,
     );
   }
 
@@ -57,14 +46,14 @@ final class GrandStaffLayout {
 
   final double staffSpace;
   final double trebleTopY;
-  final double trebleBottomY;
-  final double bassBottomY;
   final double systemLeftX;
   final double systemRightX;
-  final double clefCenterX;
   final double targetNoteX;
-  final double wrongColumnX;
 
+  double get trebleBottomY => trebleTopY + (4.0 * staffSpace);
+  double get bassBottomY => trebleBottomY + (9.0 * staffSpace);
+  double get clefCenterX => systemLeftX + (2.2 * staffSpace);
+  double get wrongColumnX => targetNoteX + (staffSpace * 4.4);
   double get fontSize => staffSpace * 4.0;
   double get braceWidth => 1.05 * staffSpace;
   double get noteWidth => 1.69 * staffSpace;
@@ -72,6 +61,12 @@ final class GrandStaffLayout {
   double yForStep(Clef clef, int stepsFromBottomLine) {
     final bottomY = clef == Clef.treble ? trebleBottomY : bassBottomY;
     return bottomY - (stepsFromBottomLine * 0.5 * staffSpace);
+  }
+
+  /// Horizontal center for an accidental to the left of [noteCenterX].
+  double accidentalX(double noteCenterX, {int column = 0}) {
+    final offset = 0.75 + (column * 1.10);
+    return noteCenterX - (noteWidth * 0.5) - (staffSpace * offset);
   }
 
   /// Builds a tapered cubic-Bezier piano brace spanning treble top to bass bottom.
