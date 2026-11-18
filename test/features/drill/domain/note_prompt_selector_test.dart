@@ -28,7 +28,7 @@ void main() {
     });
 
     test(
-      'never repeats previous StaffNote back-to-back across Stages 1..5',
+      'never repeats previous StaffNote back-to-back across Stages 1..4',
       () {
         final random = math.Random(42);
         final selector = NotePromptSelector(nextInt: random.nextInt);

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/app/app.dart';
 import 'package:piano_exercises/features/midi/midi.dart';
+import 'package:piano_exercises/features/progression/progression.dart';
 
 class _StubMidiRepository implements MidiRepository {
   final StreamController<List<MidiDeviceInfo>> _devicesController =
@@ -53,7 +54,7 @@ class _StubMidiRepository implements MidiRepository {
 
 void main() {
   testWidgets(
-    'PianoExercisesApp renders DrillScreen and navigates to BLE-MIDI Spike',
+    'PianoExercisesApp renders DrillScreen and navigates to BLE-MIDI Connection',
     (tester) async {
       final repository = _StubMidiRepository();
       addTearDown(repository.dispose);
@@ -77,8 +78,26 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('BLE-MIDI Spike'), findsOneWidget);
+      expect(find.text('BLE-MIDI Connection'), findsOneWidget);
       expect(find.text('Scan'), findsOneWidget);
     },
   );
+
+  test('bootstrapPianoExercisesRoot passes created repository and falls back to in-memory on init failure', () async {
+    final provided = InMemoryProgressionRepository();
+    final normalRoot = await bootstrapPianoExercisesRoot(
+      createProgressionRepository: () async => provided,
+    );
+    expect(normalRoot.progressionRepository, same(provided));
+
+    final fallbackRoot = await bootstrapPianoExercisesRoot(
+      createProgressionRepository: () async {
+        throw StateError('Simulated storage plugin failure');
+      },
+    );
+    expect(
+      fallbackRoot.progressionRepository,
+      isA<InMemoryProgressionRepository>(),
+    );
+  });
 }

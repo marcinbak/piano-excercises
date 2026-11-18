@@ -23,6 +23,7 @@ class _FakeMidiRepository implements MidiRepository {
 
   int startScanCalls = 0;
   int stopScanCalls = 0;
+  final List<String> callOrder = <String>[];
 
   @override
   Stream<List<MidiDeviceInfo>> get devicesStream => devicesController.stream;
@@ -43,6 +44,7 @@ class _FakeMidiRepository implements MidiRepository {
   @override
   Future<void> startScan() async {
     startScanCalls += 1;
+    callOrder.add('startScan');
     if (onStartScan != null) {
       await onStartScan!();
     }
@@ -54,6 +56,7 @@ class _FakeMidiRepository implements MidiRepository {
   @override
   Future<void> stopScan() async {
     stopScanCalls += 1;
+    callOrder.add('stopScan');
     if (stopScanError != null) {
       throw stopScanError!;
     }
@@ -61,6 +64,7 @@ class _FakeMidiRepository implements MidiRepository {
 
   @override
   Future<void> connect(MidiDeviceInfo device) async {
+    callOrder.add('connect:${device.id}');
     if (onConnect != null) {
       await onConnect!(device);
     }
@@ -299,4 +303,28 @@ void main() {
       sub.close();
     },
   );
+
+  test('connect stops an active scan before connecting', () async {
+    const device = MidiDeviceInfo(
+      id: 'ble-1',
+      name: 'FP-30X',
+      typeLabel: 'BLE',
+      isConnected: false,
+    );
+    final sub = container.listen(midiScanControllerProvider, (_, _) {});
+    final controller = container.read(midiScanControllerProvider.notifier);
+
+    await controller.startScan();
+    expect(sub.read().isScanning, isTrue);
+
+    await controller.connect(device);
+    expect(sub.read().isScanning, isFalse);
+    expect(sub.read().connectingDeviceId, isNull);
+    expect(repository.callOrder, const <String>[
+      'startScan',
+      'stopScan',
+      'connect:ble-1',
+    ]);
+    sub.close();
+  });
 }

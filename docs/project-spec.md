@@ -16,14 +16,13 @@ Replicate the core note-reading drill loop from [MusoPhone Exercise 7](https://m
 
 | Stage | Scope | Purpose |
 | --- | --- | --- |
-| 1 | `C4` on treble and bass clefs | Verify MIDI connection and basic response |
-| 2 | `+ C3` (bass), `C5` (treble) | Expand octave recognition from Middle C |
-| 3 | `+ C2` (bass), `C6` (treble) | Complete `C2..C6` anchors across the grand staff |
-| 4 | `+ F3` (bass), `G4` (treble) | Establish primary clef landmark notes |
-| 5 | `+` remaining naturals across bass `C2..B3` and treble `D4..C6` | Fill gaps between landmarks (max 2 ledger lines) |
-| 6+ | Accidentals, intervals, speed drills | Planned future expansion after core loop |
+| 1 | `C4` (treble and bass), `C3` (bass), `C5` (treble) | Establish Core Cs and octave anchors across both clefs |
+| 2 | `+ C2` (bass), `C6` (treble) | Complete `C2..C6` anchors across the grand staff |
+| 3 | `+ F3` (bass), `G4` (treble) | Establish primary clef landmark notes |
+| 4 | `+` remaining naturals across bass `C2..B3` and treble `D4..C6` | Fill gaps between landmarks (max 2 ledger lines) |
+| 5+ | Accidentals, intervals, speed drills | Planned future expansion after core loop |
 
-Stage pools live in [progression_stage.dart](../lib/features/progression/domain/progression_stage.dart); default mastery criteria (`10` attempts, `90%` accuracy, `5` streak) live in [progression_rules.dart](../lib/features/progression/domain/progression_rules.dart).
+Stage pools live in [progression_stage.dart](../lib/features/progression/domain/progression_stage.dart), default mastery criteria (`10` attempts, `90%` accuracy, `5` streak) live in [progression_rules.dart](../lib/features/progression/domain/progression_rules.dart), and local progression state persists via `SharedPreferencesWithCache` in [shared_preferences_progression_repository.dart](../lib/features/progression/data/shared_preferences_progression_repository.dart).
 
 ## 4. Platform & Connectivity Requirements
 
@@ -36,7 +35,7 @@ Stage pools live in [progression_stage.dart](../lib/features/progression/domain/
 
 ## 5. Open Decisions
 
-- **BLE-MIDI & Staff Packages:** Integrated `flutter_midi_command` + `flutter_midi_command_ble` in [MidiSpikeScreen](../lib/features/midi/ui/midi_spike_screen.dart) and bundled `Bravura` SMuFL rendering in [DrillScreen](../lib/features/drill/ui/drill_screen.dart); physical BLE-MIDI hardware test remains open.
+- **BLE-MIDI & Staff Packages:** Integrated `flutter_midi_command` + `flutter_midi_command_ble` in [MidiConnectionScreen](../lib/features/midi/ui/midi_connection_screen.dart) and bundled `Bravura` SMuFL rendering in [DrillScreen](../lib/features/drill/ui/drill_screen.dart); physical iOS BLE-MIDI discovery, connection, and real-time Note On/Off input are verified.
 - **Fallback Input:** Decide whether to include an on-screen piano or microphone pitch detection when no MIDI keyboard is connected.
 - **USB-MIDI:** Decide whether to support wired USB-MIDI alongside BLE-MIDI.
 - **Pre-Release Permission Check (Deferred):** Confirm permission with the creators/owners of [MusoPhone](https://musophone.com/tests-new/?exercise=7) before any public release; all credits go to them.

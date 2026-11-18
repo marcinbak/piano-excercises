@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/drill/domain/drill_session.dart';
 import 'package:piano_exercises/features/progression/progression.dart';
 
-/// Selectable chips for switching between curriculum Stages 1–5.
+/// Selectable chips for switching between curriculum Stages 1–4.
 class DrillStageSelector extends StatelessWidget {
   const DrillStageSelector({
     super.key,
@@ -22,6 +22,7 @@ class DrillStageSelector extends StatelessWidget {
         for (final stage in ProgressionCatalog.stages)
           ChoiceChip(
             key: ValueKey<String>('drill-stage-chip-${stage.id.number}'),
+            showCheckmark: false,
             avatar: Icon(
               progression.isUnlocked(stage.id)
                   ? Icons.lock_open

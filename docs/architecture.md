@@ -8,7 +8,7 @@ Rules for where code goes and what may depend on what. Enforced by `flutter anal
 |---|---|---|
 | `lib/app/` | Composition root: `MaterialApp`, `ProviderScope`, routing, theme, DI overrides | `lib/app/app.dart` |
 | `lib/features/drill/` | Sight-reading loop: staff display, target note, pitch validation, feedback | `lib/features/drill/drill.dart` |
-| `lib/features/progression/` | Difficulty stages and unlocked note pools (`Middle C` → `Cs` → `landmarks` → `all`) | `lib/features/progression/progression.dart` |
+| `lib/features/progression/` | Difficulty stages, unlocked note pools (Core Cs → all Cs → landmarks → all naturals), and local persistence | `lib/features/progression/progression.dart` |
 | `lib/features/midi/` | BLE-MIDI discovery, connection lifecycle, Note On/Off stream | `lib/features/midi/midi.dart` |
 | `lib/shared/` | Music theory primitives, shared UI widgets, theme tokens used by ≥2 features | per-folder `<area>.dart` |
 

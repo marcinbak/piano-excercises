@@ -2,6 +2,42 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:piano_exercises/features/progression/progression.dart';
 
+final class _SpyProgressionRepository implements ProgressionRepository {
+  ProgressionSnapshot? stored;
+  int saveCalls = 0;
+  int clearCalls = 0;
+
+  @override
+  ProgressionSnapshot? load({
+    StageMasteryCriteria criteria = StageMasteryCriteria.standard,
+  }) {
+    final snapshot = stored;
+    if (snapshot == null) {
+      return null;
+    }
+    return ProgressionSnapshot(
+      activeStageId: snapshot.activeStageId,
+      highestUnlockedStageId: snapshot.highestUnlockedStageId,
+      statsByStage: snapshot.statsByStage,
+      criteria: criteria,
+    );
+  }
+
+  @override
+  Future<void> save(ProgressionSnapshot snapshot) {
+    saveCalls += 1;
+    stored = snapshot;
+    return Future<void>.value();
+  }
+
+  @override
+  Future<void> clear() {
+    clearCalls += 1;
+    stored = null;
+    return Future<void>.value();
+  }
+}
+
 void main() {
   test('starts at Stage 1 with only Stage 1 unlocked', () {
     final container = ProviderContainer();
@@ -83,5 +119,59 @@ void main() {
     expect(resetSnapshot.activeStageId, StageId.stage1);
     expect(resetSnapshot.highestUnlockedStageId, StageId.stage1);
     expect(resetSnapshot.statsByStage, isEmpty);
+  });
+
+  test('hydrates synchronously on frame 0 and persists recordAttempt, selectStage, and reset', () {
+    const customCriteria = StageMasteryCriteria(
+      minAttempts: 2,
+      minAccuracy: 1.0,
+      minStreak: 2,
+    );
+    final repository = _SpyProgressionRepository()
+      ..stored = ProgressionSnapshot(
+        activeStageId: StageId.stage3,
+        highestUnlockedStageId: StageId.stage2,
+        statsByStage: const <StageId, StageAttemptStats>{
+          StageId.stage1: StageAttemptStats(
+            attempts: 2,
+            correctAttempts: 2,
+            currentStreak: 2,
+            bestStreak: 2,
+          ),
+        },
+      );
+
+    final container = ProviderContainer(
+      overrides: [
+        progressionCriteriaProvider.overrideWithValue(customCriteria),
+        progressionRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    // Frame 0 reads hydrated state synchronously with overridden criteria.
+    final hydrated = container.read(progressionControllerProvider);
+    expect(hydrated.activeStageId, StageId.stage3);
+    expect(hydrated.highestUnlockedStageId, StageId.stage2);
+    expect(hydrated.criteria, customCriteria);
+    expect(repository.saveCalls, 0);
+
+    final controller = container.read(progressionControllerProvider.notifier);
+
+    // Re-selecting the active stage does not trigger a redundant write.
+    controller.selectStage(StageId.stage3);
+    expect(repository.saveCalls, 0);
+
+    controller.selectStage(StageId.stage4);
+    expect(repository.saveCalls, 1);
+    expect(repository.stored?.activeStageId, StageId.stage4);
+
+    controller.recordAttempt(correct: true);
+    expect(repository.saveCalls, 2);
+    expect(repository.stored?.statsFor(StageId.stage4).attempts, 1);
+
+    controller.reset();
+    expect(repository.clearCalls, 1);
+    expect(repository.stored, isNull);
   });
 }
