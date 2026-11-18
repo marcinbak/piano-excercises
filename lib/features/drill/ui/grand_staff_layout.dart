@@ -3,6 +3,13 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
+/// Horizontal placement for a rendered wrong note and optional accidental.
+typedef WrongNotePlacement = ({
+  StaffNote note,
+  double noteX,
+  double? accidentalX,
+});
+
 /// Responsive staff coordinates and SMuFL rendering helpers for [GrandStaffPainter].
 final class GrandStaffLayout {
   const GrandStaffLayout._({
@@ -67,6 +74,79 @@ final class GrandStaffLayout {
   double accidentalX(double noteCenterX, {int column = 0}) {
     final offset = 0.75 + (column * 1.10);
     return noteCenterX - (noteWidth * 0.5) - (staffSpace * offset);
+  }
+
+  /// Resolves horizontal notehead and non-overlapping accidental columns for wrong chords.
+  List<WrongNotePlacement> computeWrongNotePlacements(
+    List<StaffNote> wrongPlayedNotes,
+  ) {
+    if (wrongPlayedNotes.isEmpty) {
+      return const <WrongNotePlacement>[];
+    }
+    final sorted = List<StaffNote>.of(wrongPlayedNotes)
+      ..sort((a, b) {
+        final clefCompare = (a.clef == Clef.bass ? 0 : 1).compareTo(
+          b.clef == Clef.bass ? 0 : 1,
+        );
+        return clefCompare != 0
+            ? clefCompare
+            : a.diatonicStep.compareTo(b.diatonicStep);
+      });
+
+    final placements = <WrongNotePlacement>[];
+    Clef? previousClef;
+    var previousStep = 0;
+    var previousShifted = false;
+    int? lastCol0Step;
+    int? lastCol1Step;
+
+    for (final note in sorted) {
+      if (note.clef != previousClef) {
+        lastCol0Step = null;
+        lastCol1Step = null;
+      }
+      final isAdjacentSecond =
+          previousClef == note.clef && (note.diatonicStep - previousStep) <= 1;
+      final shiftRight = isAdjacentSecond && !previousShifted;
+      final noteX = shiftRight
+          ? wrongColumnX + (noteWidth * 0.95)
+          : wrongColumnX;
+
+      double? accX;
+      if (note.accidental != Accidental.natural) {
+        final column = _pickAccidentalColumn(
+          note.diatonicStep,
+          lastCol0Step: lastCol0Step,
+          lastCol1Step: lastCol1Step,
+        );
+        if (column == 0) {
+          lastCol0Step = note.diatonicStep;
+        } else {
+          lastCol1Step = note.diatonicStep;
+        }
+        accX = accidentalX(wrongColumnX, column: column);
+      }
+
+      placements.add((note: note, noteX: noteX, accidentalX: accX));
+      previousClef = note.clef;
+      previousStep = note.diatonicStep;
+      previousShifted = shiftRight;
+    }
+    return placements;
+  }
+
+  int _pickAccidentalColumn(
+    int step, {
+    required int? lastCol0Step,
+    required int? lastCol1Step,
+  }) {
+    if (lastCol0Step == null || (step - lastCol0Step) >= 6) {
+      return 0;
+    }
+    if (lastCol1Step == null || (step - lastCol1Step) >= 6) {
+      return 1;
+    }
+    return (step - lastCol0Step) >= (step - lastCol1Step) ? 0 : 1;
   }
 
   /// Builds a tapered cubic-Bezier piano brace spanning treble top to bass bottom.

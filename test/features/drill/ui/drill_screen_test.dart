@@ -318,6 +318,22 @@ void main() {
           reason: 'GrandStaffCard shrank below 180px at $surfaceSize',
         );
       }
+
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [midiRepositoryProvider.overrideWithValue(repository)],
+          child: const MaterialApp(home: DrillScreen()),
+        ),
+      );
+      await tester.pump();
+      expect(
+        tester
+            .state<ScrollableState>(find.byType(Scrollable))
+            .position
+            .maxScrollExtent,
+        0.0,
+      );
     },
   );
 
@@ -368,7 +384,8 @@ void main() {
     },
   );
 
-  test('GrandStaffPainter separates C#4 + D#4 sharps into distinct non-overlapping columns', () {
+  test('GrandStaffLayout separates sharps across C#4 + D#4, C4 + C#4 + D#4, and F#4 + A#4', () {
+    const c4 = StaffNote(note: DiatonicNote.c, octave: 4, clef: Clef.treble);
     const cSharp4 = StaffNote(
       note: DiatonicNote.c,
       octave: 4,
@@ -381,6 +398,19 @@ void main() {
       clef: Clef.treble,
       accidental: Accidental.sharp,
     );
+    const fSharp4 = StaffNote(
+      note: DiatonicNote.f,
+      octave: 4,
+      clef: Clef.treble,
+      accidental: Accidental.sharp,
+    );
+    const aSharp4 = StaffNote(
+      note: DiatonicNote.a,
+      octave: 4,
+      clef: Clef.treble,
+      accidental: Accidental.sharp,
+    );
+
     final layout = GrandStaffLayout.fromSize(const Size(328, 240));
     expect(layout.trebleBottomY, layout.trebleTopY + (4.0 * layout.staffSpace));
     expect(
@@ -390,29 +420,51 @@ void main() {
     expect(layout.clefCenterX, layout.systemLeftX + (2.2 * layout.staffSpace));
     expect(layout.wrongColumnX, layout.targetNoteX + (4.4 * layout.staffSpace));
 
-    final placements = GrandStaffPainter.computeWrongNotePlacements(
-      layout,
-      const <StaffNote>[cSharp4, dSharp4],
-    );
-    expect(placements, hasLength(2));
-
-    final lower = placements[0];
-    final upper = placements[1];
-    expect(lower.note, cSharp4);
-    expect(upper.note, dSharp4);
-    expect(lower.noteX, layout.wrongColumnX);
-    expect(upper.noteX, greaterThan(lower.noteX + (layout.noteWidth * 0.9)));
-    expect(lower.accidentalX, isNotNull);
-    expect(upper.accidentalX, isNotNull);
-    // Upper sharp sits in a secondary column strictly left of lower sharp and
-    // strictly clear of both C#4's notehead and the target notehead.
+    final pairPlacements = layout.computeWrongNotePlacements(const <StaffNote>[
+      cSharp4,
+      dSharp4,
+    ]);
+    expect(pairPlacements, hasLength(2));
+    expect(pairPlacements[0].noteX, layout.wrongColumnX);
     expect(
-      upper.accidentalX!,
-      lessThan(lower.accidentalX! - layout.staffSpace),
+      pairPlacements[1].noteX,
+      greaterThan(pairPlacements[0].noteX + (layout.noteWidth * 0.9)),
     );
     expect(
-      upper.accidentalX!,
+      pairPlacements[1].accidentalX!,
+      lessThan(pairPlacements[0].accidentalX! - layout.staffSpace),
+    );
+    expect(
+      pairPlacements[1].accidentalX!,
       greaterThan(layout.targetNoteX + (layout.noteWidth * 0.5)),
+    );
+
+    // [C4, C#4, D#4]: D#4 stays at wrongColumnX while its sharp moves to col 1.
+    final triplePlacements = layout.computeWrongNotePlacements(
+      const <StaffNote>[c4, cSharp4, dSharp4],
+    );
+    expect(triplePlacements[0].accidentalX, isNull);
+    expect(
+      triplePlacements[1].accidentalX,
+      layout.accidentalX(layout.wrongColumnX),
+    );
+    expect(
+      triplePlacements[2].accidentalX,
+      layout.accidentalX(layout.wrongColumnX, column: 1),
+    );
+
+    // [F#4, A#4]: 2 diatonic steps apart (< 6), so sharps use col 0 and col 1.
+    final thirdPlacements = layout.computeWrongNotePlacements(const <StaffNote>[
+      fSharp4,
+      aSharp4,
+    ]);
+    expect(
+      thirdPlacements[0].accidentalX,
+      layout.accidentalX(layout.wrongColumnX),
+    );
+    expect(
+      thirdPlacements[1].accidentalX,
+      layout.accidentalX(layout.wrongColumnX, column: 1),
     );
   });
 

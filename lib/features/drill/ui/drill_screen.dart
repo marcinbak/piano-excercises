@@ -61,10 +61,10 @@ class DrillScreen extends ConsumerWidget {
       body: SafeArea(
         child: CustomScrollView(
           slivers: <Widget>[
-            SliverPadding(
-              padding: const EdgeInsets.all(16),
-              sliver: SliverFillRemaining(
-                hasScrollBody: false,
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[

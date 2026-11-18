@@ -107,8 +107,7 @@ class GrandStaffPainter extends CustomPainter {
   }
 
   void _paintWrongNotes(Canvas canvas, GrandStaffLayout layout, Size size) {
-    for (final placement in computeWrongNotePlacements(
-      layout,
+    for (final placement in layout.computeWrongNotePlacements(
       wrongPlayedNotes,
     )) {
       _paintNote(
@@ -121,61 +120,6 @@ class GrandStaffPainter extends CustomPainter {
         color: errorColor,
       );
     }
-  }
-
-  /// Resolves horizontal notehead and accidental coordinates for wrong chords.
-  static List<({StaffNote note, double noteX, double? accidentalX})>
-  computeWrongNotePlacements(
-    GrandStaffLayout layout,
-    List<StaffNote> wrongPlayedNotes,
-  ) {
-    if (wrongPlayedNotes.isEmpty) {
-      return const <({StaffNote note, double noteX, double? accidentalX})>[];
-    }
-    final sorted = List<StaffNote>.of(wrongPlayedNotes)
-      ..sort((a, b) {
-        final clefCompare = (a.clef == Clef.bass ? 0 : 1).compareTo(
-          b.clef == Clef.bass ? 0 : 1,
-        );
-        return clefCompare != 0
-            ? clefCompare
-            : a.diatonicStep.compareTo(b.diatonicStep);
-      });
-
-    final placements =
-        <({StaffNote note, double noteX, double? accidentalX})>[];
-    Clef? previousClef;
-    var previousStep = 0;
-    var previousShifted = false;
-    var previousHasAccidental = false;
-
-    for (final note in sorted) {
-      final isAdjacentSecond =
-          previousClef == note.clef && (note.diatonicStep - previousStep) <= 1;
-      final shiftRight = isAdjacentSecond && !previousShifted;
-      final noteX = shiftRight
-          ? layout.wrongColumnX + (layout.noteWidth * 0.95)
-          : layout.wrongColumnX;
-      final double? accidentalX;
-      if (note.accidental == Accidental.natural) {
-        accidentalX = null;
-      } else if (shiftRight) {
-        accidentalX = layout.accidentalX(
-          layout.wrongColumnX,
-          column: previousHasAccidental ? 1 : 0,
-        );
-      } else {
-        accidentalX = layout.accidentalX(noteX);
-      }
-
-      placements.add((note: note, noteX: noteX, accidentalX: accidentalX));
-
-      previousClef = note.clef;
-      previousStep = note.diatonicStep;
-      previousShifted = shiftRight;
-      previousHasAccidental = note.accidental != Accidental.natural;
-    }
-    return placements;
   }
 
   void _paintNote(
