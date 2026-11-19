@@ -14,35 +14,14 @@ abstract final class ScoreBeamSolver {
     SmuflClef clef,
   ) {
     final overrides = <int, bool>{};
-    var i = 0;
-    while (i < slices.length) {
-      final chord = _chordForClef(slices[i], clef);
-      final groupId = chord?.beamGroupId;
-      if (chord == null || chord.duration.beamCount == 0 || groupId == null) {
-        i += 1;
-        continue;
+    for (final members in _collectBeamRuns(slices, clef)) {
+      final notes = <NotationNote>[
+        for (final idx in members) ..._chordForClef(slices[idx], clef)!.notes,
+      ];
+      final stemUp = ChordCollisionSolver.computeStemUp(notes);
+      for (final idx in members) {
+        overrides[idx] = stemUp;
       }
-      var end = i + 1;
-      while (end < slices.length) {
-        final next = _chordForClef(slices[end], clef);
-        if (next == null ||
-            next.duration.beamCount == 0 ||
-            next.beamGroupId != groupId) {
-          break;
-        }
-        end += 1;
-      }
-      if (end - i >= 2) {
-        final notes = <NotationNote>[
-          for (var j = i; j < end; j += 1)
-            ..._chordForClef(slices[j], clef)!.notes,
-        ];
-        final stemUp = ChordCollisionSolver.computeStemUp(notes);
-        for (var j = i; j < end; j += 1) {
-          overrides[j] = stemUp;
-        }
-      }
-      i = end;
     }
     return overrides;
   }
@@ -56,85 +35,94 @@ abstract final class ScoreBeamSolver {
     required double staffSpace,
   }) {
     final groups = <PlacedBeamGroup>[];
+    for (final members in _collectBeamRuns(sourceSlices, clef)) {
+      groups.add(
+        _finalizeBeamGroup(
+          sourceSlices: sourceSlices,
+          placedSlices: placedSlices,
+          updatedChords: updatedChords,
+          members: members,
+          clef: clef,
+          staffSpace: staffSpace,
+        ),
+      );
+    }
+    return groups;
+  }
+
+  static List<List<int>> _collectBeamRuns(
+    List<NotationSlice> slices,
+    SmuflClef clef,
+  ) {
+    final runs = <List<int>>[];
     var i = 0;
-    while (i < sourceSlices.length) {
-      final chord = _chordForClef(sourceSlices[i], clef);
+    while (i < slices.length) {
+      final chord = _chordForClef(slices[i], clef);
       final groupId = chord?.beamGroupId;
       if (chord == null || chord.duration.beamCount == 0 || groupId == null) {
         i += 1;
         continue;
       }
-      var end = i + 1;
-      while (end < sourceSlices.length) {
-        final next = _chordForClef(sourceSlices[end], clef);
-        if (next == null ||
-            next.duration.beamCount == 0 ||
-            next.beamGroupId != groupId) {
+      final members = <int>[i];
+      var scan = i + 1;
+      while (scan < slices.length) {
+        if (_restForClef(slices[scan], clef) != null) {
           break;
         }
-        end += 1;
+        final next = _chordForClef(slices[scan], clef);
+        if (next == null) {
+          // Opposite staff subdivides this beat while current clef holds; skip slice.
+          scan += 1;
+          continue;
+        }
+        if (next.duration.beamCount == 0 || next.beamGroupId != groupId) {
+          break;
+        }
+        members.add(scan);
+        scan += 1;
       }
-      if (end - i >= 2) {
-        groups.add(
-          _finalizeBeamGroup(
-            sourceSlices: sourceSlices,
-            placedSlices: placedSlices,
-            updatedChords: updatedChords,
-            start: i,
-            end: end,
-            clef: clef,
-            staffSpace: staffSpace,
-          ),
-        );
+      if (members.length >= 2) {
+        runs.add(members);
       }
-      i = end;
+      i = scan;
     }
-    return groups;
+    return runs;
   }
 
   static PlacedBeamGroup _finalizeBeamGroup({
     required List<NotationSlice> sourceSlices,
     required List<SliceGeometry> placedSlices,
     required Map<int, PlacedChord> updatedChords,
-    required int start,
-    required int end,
+    required List<int> members,
     required SmuflClef clef,
     required double staffSpace,
   }) {
-    final firstChord = _placedChordForClef(placedSlices[start], clef)!;
-    final lastChord = _placedChordForClef(placedSlices[end - 1], clef)!;
+    final firstChord = _placedChordForClef(placedSlices[members.first], clef)!;
+    final lastChord = _placedChordForClef(placedSlices[members.last], clef)!;
     final stemUp = firstChord.stemUp;
     final firstX = firstChord.stemX!;
-    final lastX = lastChord.stemX!;
-    final dx = lastX - firstX;
-    final rawSlope = dx > 0
-        ? (lastChord.stemEndY! - firstChord.stemEndY!) / dx
-        : 0.0;
-    final slope = rawSlope.clamp(-_maxBeamSlope, _maxBeamSlope);
+    final dx = lastChord.stemX! - firstX;
+    final slope =
+        (dx > 0 ? (lastChord.stemEndY! - firstChord.stemEndY!) / dx : 0.0)
+            .clamp(-_maxBeamSlope, _maxBeamSlope);
     final baseY = firstChord.stemEndY!;
-    final minStemPx = 2.6 * staffSpace;
-
-    var shiftY = 0.0;
-    for (var j = start; j < end; j += 1) {
-      final placed = _placedChordForClef(placedSlices[j], clef)!;
-      final lineY = baseY + (slope * (placed.stemX! - firstX));
-      final extremeY = stemUp
-          ? placed.noteheads.map((n) => n.centerY).reduce(math.min)
-          : placed.noteheads.map((n) => n.centerY).reduce(math.max);
-      final delta = stemUp
-          ? (extremeY - minStemPx) - lineY
-          : (extremeY + minStemPx) - lineY;
-      if ((stemUp && delta < shiftY) || (!stemUp && delta > shiftY)) {
-        shiftY = delta;
-      }
-    }
+    final shiftY = _computeClearanceShift(
+      placedSlices: placedSlices,
+      members: members,
+      clef: clef,
+      stemUp: stemUp,
+      firstX: firstX,
+      baseY: baseY,
+      slope: slope,
+      minStemPx: 2.6 * staffSpace,
+    );
 
     final beamChords = <PlacedBeamChord>[];
-    for (var j = start; j < end; j += 1) {
-      final src = _chordForClef(sourceSlices[j], clef)!;
-      final placed = _placedChordForClef(placedSlices[j], clef)!;
+    for (final idx in members) {
+      final src = _chordForClef(sourceSlices[idx], clef)!;
+      final placed = _placedChordForClef(placedSlices[idx], clef)!;
       final tipY = baseY + shiftY + (slope * (placed.stemX! - firstX));
-      updatedChords[j] = PlacedChord(
+      updatedChords[idx] = PlacedChord(
         clef: placed.clef,
         noteheads: placed.noteheads,
         accidentals: placed.accidentals,
@@ -161,8 +149,38 @@ abstract final class ScoreBeamSolver {
     );
   }
 
+  static double _computeClearanceShift({
+    required List<SliceGeometry> placedSlices,
+    required List<int> members,
+    required SmuflClef clef,
+    required bool stemUp,
+    required double firstX,
+    required double baseY,
+    required double slope,
+    required double minStemPx,
+  }) {
+    var shiftY = 0.0;
+    for (final idx in members) {
+      final placed = _placedChordForClef(placedSlices[idx], clef)!;
+      final lineY = baseY + (slope * (placed.stemX! - firstX));
+      final extremeY = stemUp
+          ? placed.noteheads.map((n) => n.centerY).reduce(math.min)
+          : placed.noteheads.map((n) => n.centerY).reduce(math.max);
+      final delta = stemUp
+          ? (extremeY - minStemPx) - lineY
+          : (extremeY + minStemPx) - lineY;
+      if ((stemUp && delta < shiftY) || (!stemUp && delta > shiftY)) {
+        shiftY = delta;
+      }
+    }
+    return shiftY;
+  }
+
   static NotationChord? _chordForClef(NotationSlice slice, SmuflClef clef) =>
       clef == SmuflClef.treble ? slice.trebleChord : slice.bassChord;
+
+  static NotationRest? _restForClef(NotationSlice slice, SmuflClef clef) =>
+      clef == SmuflClef.treble ? slice.trebleRest : slice.bassRest;
 
   static PlacedChord? _placedChordForClef(
     SliceGeometry slice,

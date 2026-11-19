@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smufl_notation/smufl_notation.dart';
+import 'package:smufl_notation/src/score_wrong_note_painter.dart';
 
 import '../example/main.dart';
 import '../example/spike_fixtures.dart';
@@ -94,7 +95,51 @@ void main() {
       painter.paint(canvas, layout.totalSize);
       final picture = recorder.endRecording();
       picture.dispose();
+
+      final target = layout.slicePlacement(1)!;
+      final specs = ScoreWrongNotePainter.computeOverlaySpecs(
+        system: target.system,
+        slice: target.slice,
+        overlay: WrongNoteOverlay(
+          sliceIndex: 1,
+          notes: [NotationNote(staffStep: 15, clef: SmuflClef.treble)],
+        ),
+      );
+      expect(
+        specs.single.noteY,
+        closeTo(target.system.yForStep(SmuflClef.treble, 15), 1e-6),
+      );
+      expect(
+        specs.single.ledgerYs.last,
+        closeTo(target.system.yForStep(SmuflClef.treble, 14), 1e-6),
+      );
     });
+
+    testWidgets(
+      'n2: safely handles activeSliceIndex 0 -> 5 -> null before post-frame',
+      (tester) async {
+        Widget buildAt(int? activeSlice) => Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 400,
+              height: 220,
+              child: GrandStaffScoreView(
+                score: SpikeFixtures.polyphonicGrandStaff,
+                activeSliceIndex: activeSlice,
+              ),
+            ),
+          ),
+        );
+
+        await tester.pumpWidget(buildAt(0));
+        await tester.pumpWidget(buildAt(5), phase: EnginePhase.layout);
+        await tester.pumpWidget(buildAt(null));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('SmuflSpikeApp harness', () {

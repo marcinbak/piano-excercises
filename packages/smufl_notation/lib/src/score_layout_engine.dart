@@ -24,75 +24,38 @@ abstract final class ScoreLayoutEngine {
     ScoreStyle style = const ScoreStyle(),
   }) {
     final sp = math.max(4.0, style.staffSpace);
+    final normalizedStyle = style.staffSpace == sp
+        ? style
+        : style.copyWith(staffSpace: sp);
     final safeWidth = availableWidth.isFinite
         ? math.max(availableWidth, 120.0)
         : 360.0;
-    final leftMargin = math.min(2.0 * sp, safeWidth * 0.08);
-    final rightMargin = math.min(1.2 * sp, safeWidth * 0.04);
-    final systemLeftX = math.max(leftMargin, 1.8 * sp);
+    final systemLeftX = math.max(
+      math.min(2.0 * sp, safeWidth * 0.08),
+      1.8 * sp,
+    );
     final systemRightX = math.max(
       systemLeftX + (8.0 * sp),
-      safeWidth - rightMargin,
+      safeWidth - math.min(1.2 * sp, safeWidth * 0.04),
     );
 
     if (score.measures.isEmpty) {
       return EngravedScoreLayout(
-        totalSize: Size(safeWidth, (18.0 * sp) + style.systemGap),
-        style: style,
+        totalSize: Size(safeWidth, (18.0 * sp) + normalizedStyle.systemGap),
+        style: normalizedStyle,
         systems: const <SystemGeometry>[],
       );
     }
 
     final prepared = ScoreMeasurePreparer.prepareMeasures(score.measures, sp);
     final rows = _wrapSystems(prepared, systemRightX - systemLeftX, sp);
-
-    final systemTopPad = 3.0 * sp;
-    final staffSpan = (8.0 + style.trebleToBassGapSpaces) * sp;
-    final systemHeight = systemTopPad + staffSpan + (3.0 * sp);
-
-    final rawSystems = <SystemGeometry>[];
-    var currentTopY = sp;
-
-    for (var sIdx = 0; sIdx < rows.length; sIdx += 1) {
-      final trebleTopY = currentTopY + systemTopPad;
-      final bassBottomY = trebleTopY + staffSpan;
-      final bottomY = currentTopY + systemHeight;
-      final sysTemplate = SystemGeometry(
-        systemIndex: sIdx,
-        topY: currentTopY,
-        bottomY: bottomY,
-        trebleTopY: trebleTopY,
-        bassBottomY: bassBottomY,
-        leftX: systemLeftX,
-        rightX: systemRightX,
-        clefCenterX: systemLeftX + (1.85 * sp),
-        staffSpace: sp,
-        trebleToBassGapSpaces: style.trebleToBassGapSpaces,
-        measures: const <MeasureGeometry>[],
-      );
-      final measures = _layoutSystemRow(
-        row: rows[sIdx],
-        system: sysTemplate,
-        totalMeasureCount: prepared.length,
-        sp: sp,
-      );
-      rawSystems.add(
-        SystemGeometry(
-          systemIndex: sIdx,
-          topY: currentTopY,
-          bottomY: bottomY,
-          trebleTopY: trebleTopY,
-          bassBottomY: bassBottomY,
-          leftX: systemLeftX,
-          rightX: systemRightX,
-          clefCenterX: sysTemplate.clefCenterX,
-          staffSpace: sp,
-          trebleToBassGapSpaces: style.trebleToBassGapSpaces,
-          measures: measures,
-        ),
-      );
-      currentTopY = bottomY + style.systemGap;
-    }
+    final rawSystems = _buildRawSystems(
+      rows: rows,
+      style: normalizedStyle,
+      systemLeftX: systemLeftX,
+      systemRightX: systemRightX,
+      totalMeasures: prepared.length,
+    );
 
     final tiesByMeasure = <int, List<PlacedTieArc>>{};
     ScoreTieSolver.resolveTies(
@@ -101,13 +64,66 @@ abstract final class ScoreLayoutEngine {
       staffSpace: sp,
     );
 
-    final finalSystems = _attachTies(rawSystems, tiesByMeasure);
-    final totalHeight = math.max(1.0, currentTopY - style.systemGap + sp);
+    final lastBottom = rawSystems.last.bottomY;
     return EngravedScoreLayout(
-      totalSize: Size(safeWidth, totalHeight),
-      style: style,
-      systems: finalSystems,
+      totalSize: Size(safeWidth, math.max(1.0, lastBottom + sp)),
+      style: normalizedStyle,
+      systems: _attachTies(rawSystems, tiesByMeasure),
     );
+  }
+
+  static List<SystemGeometry> _buildRawSystems({
+    required List<List<PreparedMeasure>> rows,
+    required ScoreStyle style,
+    required double systemLeftX,
+    required double systemRightX,
+    required int totalMeasures,
+  }) {
+    final sp = style.staffSpace;
+    final systemTopPad = 3.0 * sp;
+    final staffSpan = (8.0 + style.trebleToBassGapSpaces) * sp;
+    final systemHeight = systemTopPad + staffSpan + (3.0 * sp);
+
+    final rawSystems = <SystemGeometry>[];
+    var currentTopY = sp;
+    for (var sIdx = 0; sIdx < rows.length; sIdx += 1) {
+      final trebleTopY = currentTopY + systemTopPad;
+      final sysTemplate = SystemGeometry(
+        systemIndex: sIdx,
+        topY: currentTopY,
+        bottomY: currentTopY + systemHeight,
+        trebleTopY: trebleTopY,
+        bassBottomY: trebleTopY + staffSpan,
+        leftX: systemLeftX,
+        rightX: systemRightX,
+        clefCenterX: systemLeftX + (1.85 * sp),
+        staffSpace: sp,
+        trebleToBassGapSpaces: style.trebleToBassGapSpaces,
+        measures: const <MeasureGeometry>[],
+      );
+      rawSystems.add(
+        SystemGeometry(
+          systemIndex: sIdx,
+          topY: sysTemplate.topY,
+          bottomY: sysTemplate.bottomY,
+          trebleTopY: sysTemplate.trebleTopY,
+          bassBottomY: sysTemplate.bassBottomY,
+          leftX: systemLeftX,
+          rightX: systemRightX,
+          clefCenterX: sysTemplate.clefCenterX,
+          staffSpace: sp,
+          trebleToBassGapSpaces: style.trebleToBassGapSpaces,
+          measures: _layoutSystemRow(
+            row: rows[sIdx],
+            system: sysTemplate,
+            totalMeasureCount: totalMeasures,
+            sp: sp,
+          ),
+        ),
+      );
+      currentTopY = sysTemplate.bottomY + style.systemGap;
+    }
+    return rawSystems;
   }
 
   static List<List<PreparedMeasure>> _wrapSystems(
@@ -174,14 +190,16 @@ abstract final class ScoreLayoutEngine {
 
       out.add(
         ScoreMeasurePlacer.placeMeasure(
-          prep: prep,
-          system: system,
-          leftX: cursorX,
-          rightX: math.max(cursorX + 2.0, mRight),
-          headerScale: headerScale,
-          isSystemStart: isSystemStart,
-          isFinalMeasure: prep.index == totalMeasureCount - 1,
-          sp: sp,
+          MeasurePlacementSpec(
+            prep: prep,
+            system: system,
+            leftX: cursorX,
+            rightX: math.max(cursorX + 2.0, mRight),
+            headerScale: headerScale,
+            isSystemStart: isSystemStart,
+            isFinalMeasure: prep.index == totalMeasureCount - 1,
+            sp: sp,
+          ),
         ),
       );
       cursorX = out.last.rightX;

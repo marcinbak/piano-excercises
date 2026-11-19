@@ -16,8 +16,29 @@ abstract final class ScorePainterChordRenderer {
     if (chord == null) {
       return;
     }
+    _paintNoteheads(canvas, system, chord, style, color);
+    for (final acc in chord.accidentals) {
+      paintSmuflGlyph(
+        canvas: canvas,
+        glyph: acc.glyph,
+        anchor: Offset(acc.centerX, acc.centerY),
+        fontSize: style.fontSize,
+        color: color,
+        fontFamily: style.fontFamily,
+        fontPackage: style.fontPackage,
+      );
+    }
+    _paintStemAndFlag(canvas, chord, style, color, system.staffSpace);
+  }
+
+  static void _paintNoteheads(
+    Canvas canvas,
+    SystemGeometry system,
+    PlacedChord chord,
+    ScoreStyle style,
+    Color color,
+  ) {
     final sp = system.staffSpace;
-    final stemWidth = math.max(1.0, SmuflGlyphs.stemThicknessSpaces * sp);
     final ledgerPaint = Paint()
       ..color = style.staffLineColor
       ..strokeWidth = math.max(1.0, sp * 0.10);
@@ -48,44 +69,42 @@ abstract final class ScorePainterChordRenderer {
       );
       paintDots(canvas, head.dotStartX, head.dotY, head.dots, style, color, sp);
     }
+  }
 
-    for (final acc in chord.accidentals) {
+  static void _paintStemAndFlag(
+    Canvas canvas,
+    PlacedChord chord,
+    ScoreStyle style,
+    Color color,
+    double sp,
+  ) {
+    if (chord.stemX == null ||
+        chord.stemStartY == null ||
+        chord.stemEndY == null) {
+      return;
+    }
+    final stemWidth = math.max(1.0, SmuflGlyphs.stemThicknessSpaces * sp);
+    canvas.drawLine(
+      Offset(chord.stemX!, chord.stemStartY!),
+      Offset(chord.stemX!, chord.stemEndY!),
+      Paint()
+        ..color = color
+        ..strokeWidth = stemWidth,
+    );
+    if (chord.flagCount > 0) {
+      final flagGlyph = chord.flagCount >= 2
+          ? (chord.stemUp ? SmuflGlyphs.flag16thUp : SmuflGlyphs.flag16thDown)
+          : (chord.stemUp ? SmuflGlyphs.flag8thUp : SmuflGlyphs.flag8thDown);
       paintSmuflGlyph(
         canvas: canvas,
-        glyph: acc.glyph,
-        anchor: Offset(acc.centerX, acc.centerY),
+        glyph: flagGlyph,
+        anchor: Offset(chord.stemX! - (stemWidth * 0.5), chord.stemEndY!),
         fontSize: style.fontSize,
         color: color,
         fontFamily: style.fontFamily,
         fontPackage: style.fontPackage,
+        centerHorizontally: false,
       );
-    }
-
-    if (chord.stemX != null &&
-        chord.stemStartY != null &&
-        chord.stemEndY != null) {
-      canvas.drawLine(
-        Offset(chord.stemX!, chord.stemStartY!),
-        Offset(chord.stemX!, chord.stemEndY!),
-        Paint()
-          ..color = color
-          ..strokeWidth = stemWidth,
-      );
-      if (chord.flagCount > 0) {
-        final flagGlyph = chord.flagCount >= 2
-            ? (chord.stemUp ? SmuflGlyphs.flag16thUp : SmuflGlyphs.flag16thDown)
-            : (chord.stemUp ? SmuflGlyphs.flag8thUp : SmuflGlyphs.flag8thDown);
-        paintSmuflGlyph(
-          canvas: canvas,
-          glyph: flagGlyph,
-          anchor: Offset(chord.stemX! - (stemWidth * 0.5), chord.stemEndY!),
-          fontSize: style.fontSize,
-          color: color,
-          fontFamily: style.fontFamily,
-          fontPackage: style.fontPackage,
-          centerHorizontally: false,
-        );
-      }
     }
   }
 

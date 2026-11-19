@@ -29,6 +29,22 @@ final class ScoreStyle {
 
   double get fontSize => staffSpace * 4.0;
 
+  /// Returns a copy with overridden visual properties.
+  ScoreStyle copyWith({double? staffSpace}) {
+    return ScoreStyle(
+      staffSpace: staffSpace ?? this.staffSpace,
+      systemGap: systemGap,
+      trebleToBassGapSpaces: trebleToBassGapSpaces,
+      inkColor: inkColor,
+      staffLineColor: staffLineColor,
+      cursorColor: cursorColor,
+      errorColor: errorColor,
+      dimmedOpacity: dimmedOpacity,
+      fontFamily: fontFamily,
+      fontPackage: fontPackage,
+    );
+  }
+
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||

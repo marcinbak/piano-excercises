@@ -52,12 +52,8 @@ abstract final class ChordCollisionSolver {
     var maxStep = notes.first.staffStep;
     var stepSum = 0;
     for (final note in notes) {
-      if (note.staffStep < minStep) {
-        minStep = note.staffStep;
-      }
-      if (note.staffStep > maxStep) {
-        maxStep = note.staffStep;
-      }
+      minStep = math.min(minStep, note.staffStep);
+      maxStep = math.max(maxStep, note.staffStep);
       stepSum += note.staffStep;
     }
     final topDist = maxStep - _middleLineStep;
@@ -65,21 +61,18 @@ abstract final class ChordCollisionSolver {
     if (topDist != bottomDist) {
       return bottomDist > topDist;
     }
-    final avgStep = stepSum / notes.length;
-    return avgStep < _middleLineStep;
+    return (stepSum / notes.length) < _middleLineStep;
   }
 
   /// Solves placements for a [NotationChord] (with optional [overrideStemUp]).
   static SolvedChordLayout solveChord(
     NotationChord chord, {
     bool? overrideStemUp,
-  }) {
-    return solveNotes(
-      chord.notes,
-      hasStem: chord.duration.hasStem,
-      overrideStemUp: overrideStemUp,
-    );
-  }
+  }) => solveNotes(
+    chord.notes,
+    hasStem: chord.duration.hasStem,
+    overrideStemUp: overrideStemUp,
+  );
 
   /// Solves notehead shifts and accidental columns (`0..2`) for [notes].
   static SolvedChordLayout solveNotes(
@@ -104,7 +97,15 @@ abstract final class ChordCollisionSolver {
     final stemUp = overrideStemUp ?? computeStemUp(sorted);
     final shifts = _solveSecondShifts(sorted, hasStem: hasStem, stemUp: stemUp);
     final columns = _solveAccidentalColumns(sorted);
+    return _assembleLayout(sorted, shifts, columns, stemUp);
+  }
 
+  static SolvedChordLayout _assembleLayout(
+    List<NotationNote> sorted,
+    List<double> shifts,
+    List<int?> columns,
+    bool stemUp,
+  ) {
     var maxCol = -1;
     var hasRightShift = false;
     var hasLeftShift = false;
@@ -132,16 +133,13 @@ abstract final class ChordCollisionSolver {
     final minStep = sorted.first.staffStep;
     final maxStep = sorted.last.staffStep;
     const stemLengthSteps = SmuflGlyphs.defaultStemLengthSpaces * 2.0;
-    final stemStartStep = stemUp ? minStep : maxStep;
-    final stemTipStep = stemUp
-        ? math.max(maxStep + stemLengthSteps, _middleLineStep.toDouble())
-        : math.min(minStep - stemLengthSteps, _middleLineStep.toDouble());
-
     return SolvedChordLayout(
       placements: List<SolvedNotePlacement>.unmodifiable(placements),
       stemUp: stemUp,
-      stemStartStep: stemStartStep,
-      stemTipStep: stemTipStep,
+      stemStartStep: stemUp ? minStep : maxStep,
+      stemTipStep: stemUp
+          ? math.max(maxStep + stemLengthSteps, _middleLineStep.toDouble())
+          : math.min(minStep - stemLengthSteps, _middleLineStep.toDouble()),
       accidentalColumnCount: maxCol + 1,
       hasRightShiftedHead: hasRightShift,
       hasLeftShiftedHead: hasLeftShift,
@@ -162,21 +160,17 @@ abstract final class ChordCollisionSolver {
     if (stemUp || !hasStem) {
       for (var i = 1; i < sorted.length; i += 1) {
         final isSecond = (sorted[i].staffStep - sorted[i - 1].staffStep) <= 1;
-        if (!prevShifted && isSecond) {
+        prevShifted = !prevShifted && isSecond;
+        if (prevShifted) {
           shifts[i] = shiftDist;
-          prevShifted = true;
-        } else {
-          prevShifted = false;
         }
       }
     } else {
       for (var i = sorted.length - 2; i >= 0; i -= 1) {
         final isSecond = (sorted[i + 1].staffStep - sorted[i].staffStep) <= 1;
-        if (!prevShifted && isSecond) {
+        prevShifted = !prevShifted && isSecond;
+        if (prevShifted) {
           shifts[i] = -shiftDist;
-          prevShifted = true;
-        } else {
-          prevShifted = false;
         }
       }
     }
@@ -185,43 +179,35 @@ abstract final class ChordCollisionSolver {
 
   static List<int?> _solveAccidentalColumns(List<NotationNote> sorted) {
     final columns = List<int?>.filled(sorted.length, null);
-    final placedInCol = List<List<int>>.generate(
-      _maxAccidentalColumns,
-      (_) => <int>[],
-    );
+    // Sorted steps descend from index length-1 to 0, so last step per column is nearest.
+    final lastStepInCol = List<int?>.filled(_maxAccidentalColumns, null);
 
     for (var i = sorted.length - 1; i >= 0; i -= 1) {
       final note = sorted[i];
       if (note.displayedAccidental == null) {
         continue;
       }
-      final col = _pickColumn(note.staffStep, placedInCol);
-      placedInCol[col].add(note.staffStep);
+      final col = _pickColumn(note.staffStep, lastStepInCol);
+      lastStepInCol[col] = note.staffStep;
       columns[i] = col;
     }
     return columns;
   }
 
-  static int _pickColumn(int step, List<List<int>> placedInCol) {
+  static int _pickColumn(int step, List<int?> lastStepInCol) {
     var bestCol = 0;
-    var bestMinDist = -1;
+    var bestDist = -1;
     for (var col = 0; col < _maxAccidentalColumns; col += 1) {
-      final steps = placedInCol[col];
-      if (steps.isEmpty) {
+      final lastStep = lastStepInCol[col];
+      if (lastStep == null) {
         return col;
       }
-      var minDist = 999;
-      for (final existing in steps) {
-        final dist = (existing - step).abs();
-        if (dist < minDist) {
-          minDist = dist;
-        }
-      }
-      if (minDist >= _minAccidentalClearanceSteps) {
+      final dist = (lastStep - step).abs();
+      if (dist >= _minAccidentalClearanceSteps) {
         return col;
       }
-      if (minDist > bestMinDist) {
-        bestMinDist = minDist;
+      if (dist > bestDist) {
+        bestDist = dist;
         bestCol = col;
       }
     }

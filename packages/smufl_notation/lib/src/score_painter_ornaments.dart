@@ -55,16 +55,16 @@ abstract final class ScorePainterOrnaments {
   static void paintTimeSignature({
     required Canvas canvas,
     required SystemGeometry system,
-    required double centerX,
-    required int beats,
-    required int beatType,
+    required MeasureGeometry measure,
     required ScoreStyle style,
-    required Color trebleColor,
-    required Color bassColor,
+    required ({Color treble, Color bass}) colors,
   }) {
+    final centerX = measure.timeSigCenterX!;
+    final beats = measure.beats!;
+    final beatType = measure.beatType!;
     for (final entry in <(SmuflClef, Color)>[
-      (SmuflClef.treble, trebleColor),
-      (SmuflClef.bass, bassColor),
+      (SmuflClef.treble, colors.treble),
+      (SmuflClef.bass, colors.bass),
     ]) {
       _paintDigits(
         canvas: canvas,
@@ -126,9 +126,6 @@ abstract final class ScorePainterOrnaments {
     }
     final slope = (cLast.stemTipY - cFirst.stemTipY) / dx;
     final thick = SmuflGlyphs.beamThicknessSpaces * staffSpace;
-    final stepOff =
-        (SmuflGlyphs.beamThicknessSpaces + SmuflGlyphs.beamSpacingSpaces) *
-        staffSpace;
     final dir = group.stemUp ? 1.0 : -1.0;
     final stemHalf =
         math.max(1.0, SmuflGlyphs.stemThicknessSpaces * staffSpace) * 0.5;
@@ -137,13 +134,32 @@ abstract final class ScorePainterOrnaments {
 
     _drawQuad(
       canvas,
-      cFirst.stemX - stemHalf,
-      cLast.stemX + stemHalf,
-      yAt(cFirst.stemX - stemHalf),
-      yAt(cLast.stemX + stemHalf),
+      (cFirst.stemX - stemHalf, yAt(cFirst.stemX - stemHalf)),
+      (cLast.stemX + stemHalf, yAt(cLast.stemX + stemHalf)),
       dir * thick,
       paint,
     );
+    _paintSecondaryBeams(canvas, group, staffSpace, slope, paint);
+  }
+
+  static void _paintSecondaryBeams(
+    Canvas canvas,
+    PlacedBeamGroup group,
+    double staffSpace,
+    double slope,
+    Paint paint,
+  ) {
+    final cFirst = group.chords.first;
+    final dx = group.chords.last.stemX - cFirst.stemX;
+    final thick = SmuflGlyphs.beamThicknessSpaces * staffSpace;
+    final dir = group.stemUp ? 1.0 : -1.0;
+    final shift =
+        dir *
+        (SmuflGlyphs.beamThicknessSpaces + SmuflGlyphs.beamSpacingSpaces) *
+        staffSpace;
+    final stemHalf =
+        math.max(1.0, SmuflGlyphs.stemThicknessSpaces * staffSpace) * 0.5;
+    double yAt(double x) => cFirst.stemTipY + (slope * (x - cFirst.stemX));
 
     var i = 0;
     while (i < group.chords.length) {
@@ -155,24 +171,17 @@ abstract final class ScorePainterOrnaments {
       while (end < group.chords.length && group.chords[end].beamCount >= 2) {
         end += 1;
       }
-      final shift = dir * stepOff;
+      final stubLen = math.min(staffSpace * 0.95, dx * 0.45);
       final sx0 = end - i >= 2
           ? group.chords[i].stemX - stemHalf
-          : (i == 0
-                ? group.chords[i].stemX
-                : group.chords[i].stemX -
-                      math.min(staffSpace * 0.95, dx * 0.45));
+          : (i == 0 ? group.chords[i].stemX : group.chords[i].stemX - stubLen);
       final sx1 = end - i >= 2
           ? group.chords[end - 1].stemX + stemHalf
-          : (i == 0
-                ? group.chords[i].stemX + math.min(staffSpace * 0.95, dx * 0.45)
-                : group.chords[i].stemX);
+          : (i == 0 ? group.chords[i].stemX + stubLen : group.chords[i].stemX);
       _drawQuad(
         canvas,
-        sx0,
-        sx1,
-        yAt(sx0) + shift,
-        yAt(sx1) + shift,
+        (sx0, yAt(sx0) + shift),
+        (sx1, yAt(sx1) + shift),
         dir * thick,
         paint,
       );
@@ -182,18 +191,16 @@ abstract final class ScorePainterOrnaments {
 
   static void _drawQuad(
     Canvas canvas,
-    double x0,
-    double x1,
-    double y0,
-    double y1,
+    (double, double) start,
+    (double, double) end,
     double dy,
     Paint paint,
   ) {
     final path = Path()
-      ..moveTo(x0, y0)
-      ..lineTo(x1, y1)
-      ..lineTo(x1, y1 + dy)
-      ..lineTo(x0, y0 + dy)
+      ..moveTo(start.$1, start.$2)
+      ..lineTo(end.$1, end.$2)
+      ..lineTo(end.$1, end.$2 + dy)
+      ..lineTo(start.$1, start.$2 + dy)
       ..close();
     canvas.drawPath(path, paint);
   }

@@ -69,7 +69,10 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
     if (widget.activeSliceIndex != oldWidget.activeSliceIndex &&
         widget.activeSliceIndex != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scrollToActiveSlice(widget.activeSliceIndex!);
+        final target = widget.activeSliceIndex;
+        if (target != null) {
+          _scrollToActiveSlice(target);
+        }
       });
     }
   }

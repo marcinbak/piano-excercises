@@ -120,51 +120,71 @@ abstract final class ScoreMeasurePreparer {
         activeBeats = m.beats!;
         activeBeatType = m.beatType!;
       }
-
-      final tStems = ScoreBeamSolver.resolveBeamStemDirections(
-        m.slices,
-        SmuflClef.treble,
-      );
-      final bStems = ScoreBeamSolver.resolveBeamStemDirections(
-        m.slices,
-        SmuflClef.bass,
-      );
-
-      final slices = <PreparedSlice>[];
-      var bodyMinWidth = 0.0;
-      for (var s = 0; s < m.slices.length; s += 1) {
-        final slice = m.slices[s];
-        final tSolved = slice.trebleChord == null
-            ? null
-            : ChordCollisionSolver.solveChord(
-                slice.trebleChord!,
-                overrideStemUp: tStems[s],
-              );
-        final bSolved = slice.bassChord == null
-            ? null
-            : ChordCollisionSolver.solveChord(
-                slice.bassChord!,
-                overrideStemUp: bStems[s],
-              );
-        final prep = _prepareSlice(slice, tSolved, bSolved, sp);
-        slices.add(prep);
-        bodyMinWidth += prep.minWidth;
-      }
       result.add(
-        PreparedMeasure(
+        _prepareSingleMeasure(
           index: i,
           measure: m,
-          activeKeyFifths: activeKey,
+          activeKey: activeKey,
           keyChanged: keyChanged,
           activeBeats: activeBeats,
           activeBeatType: activeBeatType,
-          showTimeSignature: timeChanged,
-          slices: slices,
-          bodyMinWidth: math.max(4.5 * sp, bodyMinWidth + (0.8 * sp)),
+          timeChanged: timeChanged,
+          sp: sp,
         ),
       );
     }
     return result;
+  }
+
+  static PreparedMeasure _prepareSingleMeasure({
+    required int index,
+    required NotationMeasure measure,
+    required int activeKey,
+    required bool keyChanged,
+    required int activeBeats,
+    required int activeBeatType,
+    required bool timeChanged,
+    required double sp,
+  }) {
+    final tStems = ScoreBeamSolver.resolveBeamStemDirections(
+      measure.slices,
+      SmuflClef.treble,
+    );
+    final bStems = ScoreBeamSolver.resolveBeamStemDirections(
+      measure.slices,
+      SmuflClef.bass,
+    );
+    final slices = <PreparedSlice>[];
+    var bodyMinWidth = 0.0;
+    for (var s = 0; s < measure.slices.length; s += 1) {
+      final slice = measure.slices[s];
+      final tSolved = slice.trebleChord == null
+          ? null
+          : ChordCollisionSolver.solveChord(
+              slice.trebleChord!,
+              overrideStemUp: tStems[s],
+            );
+      final bSolved = slice.bassChord == null
+          ? null
+          : ChordCollisionSolver.solveChord(
+              slice.bassChord!,
+              overrideStemUp: bStems[s],
+            );
+      final prep = _prepareSlice(slice, tSolved, bSolved, sp);
+      slices.add(prep);
+      bodyMinWidth += prep.minWidth;
+    }
+    return PreparedMeasure(
+      index: index,
+      measure: measure,
+      activeKeyFifths: activeKey,
+      keyChanged: keyChanged,
+      activeBeats: activeBeats,
+      activeBeatType: activeBeatType,
+      showTimeSignature: timeChanged,
+      slices: slices,
+      bodyMinWidth: math.max(4.5 * sp, bodyMinWidth + (0.8 * sp)),
+    );
   }
 
   static PreparedSlice _prepareSlice(

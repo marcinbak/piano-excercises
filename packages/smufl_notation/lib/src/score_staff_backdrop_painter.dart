@@ -12,9 +12,17 @@ abstract final class ScoreStaffBackdropPainter {
     required Canvas canvas,
     required SystemGeometry system,
     required ScoreStyle style,
-    required Color trebleColor,
-    required Color bassColor,
+    required ({Color treble, Color bass}) colors,
   }) {
+    _paintStaffLinesAndBrace(canvas, system, style);
+    _paintClefs(canvas, system, style, colors);
+  }
+
+  static void _paintStaffLinesAndBrace(
+    Canvas canvas,
+    SystemGeometry system,
+    ScoreStyle style,
+  ) {
     final sp = system.staffSpace;
     final staffPaint = Paint()
       ..color = style.staffLineColor
@@ -53,7 +61,14 @@ abstract final class ScoreStaffBackdropPainter {
         ..color = style.inkColor
         ..strokeWidth = math.max(1.2, sp * 0.14),
     );
+  }
 
+  static void _paintClefs(
+    Canvas canvas,
+    SystemGeometry system,
+    ScoreStyle style,
+    ({Color treble, Color bass}) colors,
+  ) {
     paintSmuflGlyph(
       canvas: canvas,
       glyph: SmuflGlyphs.gClef,
@@ -62,7 +77,7 @@ abstract final class ScoreStaffBackdropPainter {
         system.yForStep(SmuflClef.treble, SmuflClef.treble.referenceStep),
       ),
       fontSize: style.fontSize,
-      color: trebleColor,
+      color: colors.treble,
       fontFamily: style.fontFamily,
       fontPackage: style.fontPackage,
     );
@@ -74,7 +89,7 @@ abstract final class ScoreStaffBackdropPainter {
         system.yForStep(SmuflClef.bass, SmuflClef.bass.referenceStep),
       ),
       fontSize: style.fontSize,
-      color: bassColor,
+      color: colors.bass,
       fontFamily: style.fontFamily,
       fontPackage: style.fontPackage,
     );

@@ -3,6 +3,20 @@ import 'package:smufl_notation/smufl_notation.dart';
 
 import '../example/spike_fixtures.dart';
 
+NotationChord _chord(
+  SmuflClef clef,
+  DurationKind d,
+  List<int> steps, {
+  int dots = 0,
+  String? beam,
+}) => NotationChord(
+  notes: [for (final s in steps) NotationNote(staffStep: s, clef: clef)],
+  clef: clef,
+  duration: d,
+  dots: dots,
+  beamGroupId: beam,
+);
+
 void main() {
   group('ScoreLayoutEngine wrapping & geometry', () {
     test('wraps into more systems at 320px than at 900px', () {
@@ -72,11 +86,9 @@ void main() {
                 NotationSlice(
                   sliceIndex: 0,
                   beatDuration: 4.0,
-                  trebleChord: NotationChord(
-                    notes: [NotationNote(staffStep: 2, clef: SmuflClef.treble)],
-                    clef: SmuflClef.treble,
-                    duration: DurationKind.whole,
-                  ),
+                  trebleChord: _chord(SmuflClef.treble, DurationKind.whole, [
+                    2,
+                  ]),
                 ),
               ],
             ),
@@ -86,8 +98,10 @@ void main() {
           score: score,
           availableWidth: 420,
         );
-        final m = layout.systems.first.measures.first;
-        expect(m.keyAccidentals.length, fifths.abs() * 2);
+        expect(
+          layout.systems.first.measures.first.keyAccidentals.length,
+          fifths.abs() * 2,
+        );
       }
     });
 
@@ -101,41 +115,30 @@ void main() {
               NotationSlice(
                 sliceIndex: 0,
                 beatDuration: 0.5,
-                trebleChord: NotationChord(
-                  notes: [NotationNote(staffStep: 1, clef: SmuflClef.treble)],
-                  clef: SmuflClef.treble,
-                  duration: DurationKind.eighth,
-                  beamGroupId: 'g1',
-                ),
+                trebleChord: _chord(SmuflClef.treble, DurationKind.eighth, [
+                  1,
+                ], beam: 'g1'),
               ),
               NotationSlice(
                 sliceIndex: 1,
                 beatDuration: 0.5,
-                trebleChord: NotationChord(
-                  notes: [NotationNote(staffStep: 5, clef: SmuflClef.treble)],
-                  clef: SmuflClef.treble,
-                  duration: DurationKind.eighth,
-                  beamGroupId: 'g1',
-                ),
+                trebleChord: _chord(SmuflClef.treble, DurationKind.eighth, [
+                  5,
+                ], beam: 'g1'),
               ),
               NotationSlice(
                 sliceIndex: 2,
                 beatDuration: 0.5,
-                trebleChord: NotationChord(
-                  notes: [NotationNote(staffStep: 2, clef: SmuflClef.treble)],
-                  clef: SmuflClef.treble,
-                  duration: DurationKind.eighth,
-                ),
+                trebleChord: _chord(SmuflClef.treble, DurationKind.eighth, [2]),
               ),
             ],
           ),
         ],
       );
-      final layout = ScoreLayoutEngine.layout(
+      final m = ScoreLayoutEngine.layout(
         score: score,
         availableWidth: 500,
-      );
-      final m = layout.systems.first.measures.first;
+      ).systems.first.measures.first;
       expect(m.beamGroups.length, 1);
       expect(m.beamGroups.single.chords.length, 2);
       expect(m.slices[0].trebleChord!.flagCount, 0);
@@ -152,6 +155,97 @@ void main() {
           .expand((m) => m.tieArcs)
           .length;
       expect(totalTies, greaterThan(10));
+    });
+  });
+
+  group('N6 layout regressions', () {
+    test(
+      's1: guards slice centerX when skewed beatDuration compresses slices',
+      () {
+        final slices = <NotationSlice>[
+          NotationSlice(
+            sliceIndex: 0,
+            beatDuration: 1e6,
+            trebleChord: _chord(SmuflClef.treble, DurationKind.whole, [2]),
+          ),
+          for (var i = 1; i <= 20; i += 1)
+            NotationSlice(
+              sliceIndex: i,
+              beatDuration: 0.25,
+              trebleChord: _chord(SmuflClef.treble, DurationKind.sixteenth, [
+                4,
+              ]),
+            ),
+        ];
+        final score = NotationScore(
+          title: 'Skewed',
+          measures: [NotationMeasure(measureNumber: 1, slices: slices)],
+        );
+        final layout = ScoreLayoutEngine.layout(
+          score: score,
+          availableWidth: 120,
+        );
+        for (final s in layout.systems.single.measures.single.slices) {
+          expect(s.centerX.isFinite, isTrue);
+          expect(s.cursorRect.width, greaterThan(0));
+        }
+      },
+    );
+
+    test('n1: beams bass 8ths across intervening treble 16th subdivisions', () {
+      final score = NotationScore(
+        title: 'Cross-staff beam',
+        measures: [
+          NotationMeasure(
+            measureNumber: 1,
+            slices: [
+              NotationSlice(
+                sliceIndex: 0,
+                beatDuration: 0.25,
+                trebleChord: _chord(SmuflClef.treble, DurationKind.sixteenth, [
+                  4,
+                ], beam: 't'),
+                bassChord: _chord(SmuflClef.bass, DurationKind.eighth, [
+                  2,
+                ], beam: 'b'),
+              ),
+              NotationSlice(
+                sliceIndex: 1,
+                beatDuration: 0.25,
+                trebleChord: _chord(SmuflClef.treble, DurationKind.sixteenth, [
+                  5,
+                ], beam: 't'),
+              ),
+              NotationSlice(
+                sliceIndex: 2,
+                beatDuration: 0.25,
+                trebleChord: _chord(SmuflClef.treble, DurationKind.sixteenth, [
+                  6,
+                ], beam: 't'),
+                bassChord: _chord(SmuflClef.bass, DurationKind.eighth, [
+                  4,
+                ], beam: 'b'),
+              ),
+              NotationSlice(
+                sliceIndex: 3,
+                beatDuration: 0.25,
+                trebleChord: _chord(SmuflClef.treble, DurationKind.sixteenth, [
+                  7,
+                ], beam: 't'),
+              ),
+            ],
+          ),
+        ],
+      );
+      final m = ScoreLayoutEngine.layout(
+        score: score,
+        availableWidth: 500,
+      ).systems.single.measures.single;
+      final bassBeams = m.beamGroups.where((g) => g.clef == SmuflClef.bass);
+      expect(bassBeams.length, 1);
+      expect(bassBeams.single.chords.length, 2);
+      expect(m.slices[0].bassChord!.flagCount, 0);
+      expect(m.slices[2].bassChord!.flagCount, 0);
     });
   });
 }

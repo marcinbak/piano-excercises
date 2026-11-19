@@ -16,88 +16,147 @@ abstract final class ScoreChordPlacer {
     if (chord == null || solved == null) {
       return null;
     }
-    final rightShift = solved.hasRightShiftedHead
+    final headWidth = chord.duration.hasStem
+        ? SmuflGlyphs.noteheadWidthSpaces
+        : SmuflGlyphs.wholeNoteheadWidthSpaces;
+    final shiftWidth = chord.duration.hasStem
         ? SmuflGlyphs.secondShiftSpaces
-        : 0.0;
-    final leftShift = solved.hasLeftShiftedHead
-        ? SmuflGlyphs.secondShiftSpaces
-        : 0.0;
-    final dotBaseX =
-        centerX +
-        ((SmuflGlyphs.noteheadWidthSpaces * 0.5 + rightShift + 0.55) * sp);
-    final accBaseLeft =
-        centerX -
-        ((SmuflGlyphs.noteheadWidthSpaces * 0.5 + leftShift + 0.68) * sp);
+        : SmuflGlyphs.wholeNoteheadWidthSpaces * 0.95;
+    final rightShift = solved.hasRightShiftedHead ? shiftWidth : 0.0;
+    final leftShift = solved.hasLeftShiftedHead ? shiftWidth : 0.0;
+    final dotBaseX = centerX + ((headWidth * 0.5 + rightShift + 0.55) * sp);
+    final accBaseLeft = centerX - ((headWidth * 0.5 + leftShift + 0.68) * sp);
 
-    final usedDotSteps = <int>{};
+    // Pre-claim odd space steps so adjacent even-step notes shift to step - 1.
+    final usedDotSteps = <int>{
+      if (chord.dots > 0)
+        for (final p in solved.placements)
+          if (p.note.staffStep.isOdd) p.note.staffStep,
+    };
+
     final noteheads = <PlacedNotehead>[];
     final accidentals = <PlacedAccidental>[];
     for (final p in solved.placements) {
       final nx = centerX + (p.horizontalShiftSpaces * sp);
       final ny = system.yForStep(chord.clef, p.note.staffStep);
-      double? dotY;
-      if (chord.dots > 0) {
-        var dotStep = p.note.staffStep.isEven
-            ? p.note.staffStep + 1
-            : p.note.staffStep;
-        if (usedDotSteps.contains(dotStep) && p.note.staffStep.isEven) {
-          dotStep = p.note.staffStep - 1;
-        }
-        usedDotSteps.add(dotStep);
-        dotY = system.yForStep(chord.clef, dotStep);
-      }
       noteheads.add(
-        PlacedNotehead(
+        _buildNotehead(
+          chord: chord,
           note: p.note,
-          centerX: nx,
-          centerY: ny,
-          glyph: chord.duration.noteheadGlyph,
-          dots: chord.dots,
-          ledgerSteps: ScoreMeasurePreparer.ledgerStepsFor(p.note.staffStep),
-          dotStartX: chord.dots > 0 ? dotBaseX : null,
-          dotY: dotY,
+          system: system,
+          center: (nx, ny),
+          dotBaseX: dotBaseX,
+          usedDotSteps: usedDotSteps,
         ),
       );
-      final acc = p.note.displayedAccidental;
-      if (p.accidentalColumn != null && acc != null) {
-        final ax =
-            accBaseLeft -
-            (p.accidentalColumn! *
-                SmuflGlyphs.accidentalColumnSpacingSpaces *
-                sp);
-        accidentals.add(
-          PlacedAccidental(
-            accidental: acc,
-            clef: chord.clef,
-            centerX: ax,
-            centerY: ny,
-            glyph: acc.glyph,
-          ),
-        );
+      final acc = _buildAccidental(
+        placement: p,
+        clef: chord.clef,
+        accBaseLeft: accBaseLeft,
+        ny: ny,
+        sp: sp,
+      );
+      if (acc != null) {
+        accidentals.add(acc);
       }
     }
 
+    return _assembleChord(
+      chord: chord,
+      solved: solved,
+      system: system,
+      noteheads: noteheads,
+      accidentals: accidentals,
+      centerX: centerX,
+      sp: sp,
+    );
+  }
+
+  static PlacedNotehead _buildNotehead({
+    required NotationChord chord,
+    required NotationNote note,
+    required SystemGeometry system,
+    required (double, double) center,
+    required double dotBaseX,
+    required Set<int> usedDotSteps,
+  }) {
+    double? dotY;
+    if (chord.dots > 0) {
+      var dotStep = note.staffStep.isEven ? note.staffStep + 1 : note.staffStep;
+      if (note.staffStep.isEven && usedDotSteps.contains(dotStep)) {
+        dotStep = note.staffStep - 1;
+      }
+      usedDotSteps.add(dotStep);
+      dotY = system.yForStep(chord.clef, dotStep);
+    }
+    return PlacedNotehead(
+      note: note,
+      centerX: center.$1,
+      centerY: center.$2,
+      glyph: chord.duration.noteheadGlyph,
+      dots: chord.dots,
+      ledgerSteps: ScoreMeasurePreparer.ledgerStepsFor(note.staffStep),
+      dotStartX: chord.dots > 0 ? dotBaseX : null,
+      dotY: dotY,
+    );
+  }
+
+  static PlacedAccidental? _buildAccidental({
+    required SolvedNotePlacement placement,
+    required SmuflClef clef,
+    required double accBaseLeft,
+    required double ny,
+    required double sp,
+  }) {
+    final acc = placement.note.displayedAccidental;
+    if (placement.accidentalColumn == null || acc == null) {
+      return null;
+    }
+    final ax =
+        accBaseLeft -
+        (placement.accidentalColumn! *
+            SmuflGlyphs.accidentalColumnSpacingSpaces *
+            sp);
+    return PlacedAccidental(
+      accidental: acc,
+      clef: clef,
+      centerX: ax,
+      centerY: ny,
+      glyph: acc.glyph,
+    );
+  }
+
+  static PlacedChord _assembleChord({
+    required NotationChord chord,
+    required SolvedChordLayout solved,
+    required SystemGeometry system,
+    required List<PlacedNotehead> noteheads,
+    required List<PlacedAccidental> accidentals,
+    required double centerX,
+    required double sp,
+  }) {
+    final hasStem = chord.duration.hasStem;
     return PlacedChord(
       clef: chord.clef,
       noteheads: List<PlacedNotehead>.unmodifiable(noteheads),
       accidentals: List<PlacedAccidental>.unmodifiable(accidentals),
       stemUp: solved.stemUp,
       flagCount: chord.duration.beamCount,
-      stemX: chord.duration.hasStem
+      stemX: hasStem
           ? centerX +
                 ((solved.stemUp
                         ? SmuflGlyphs.stemUpXOffsetSpaces
                         : SmuflGlyphs.stemDownXOffsetSpaces) *
                     sp)
           : null,
-      stemStartY: chord.duration.hasStem
+      stemStartY: hasStem
           ? system.yForStep(chord.clef, solved.stemStartStep) +
                 ((solved.stemUp
                         ? SmuflGlyphs.stemUpYOffsetSpaces
                         : SmuflGlyphs.stemDownYOffsetSpaces) *
                     sp)
           : null,
-      stemEndY: chord.duration.hasStem
+      stemEndY: hasStem
           ? system.yForStep(chord.clef, 0) - (solved.stemTipStep * 0.5 * sp)
           : null,
       beamGroupId: chord.beamGroupId,

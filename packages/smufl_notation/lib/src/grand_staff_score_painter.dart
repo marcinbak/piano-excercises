@@ -51,7 +51,10 @@ class GrandStaffScorePainter extends CustomPainter {
       }
       _paintSystem(canvas, system, style);
     }
+    _paintOverlays(canvas, style, cullRect);
+  }
 
+  void _paintOverlays(Canvas canvas, ScoreStyle style, Rect? cullRect) {
     for (final overlay in wrongNoteOverlays) {
       final target = layout.slicePlacement(overlay.sliceIndex);
       if (target == null) {
@@ -73,17 +76,18 @@ class GrandStaffScorePainter extends CustomPainter {
   }
 
   void _paintSystem(Canvas canvas, SystemGeometry system, ScoreStyle style) {
-    final trebleColor = _clefInk(style, SmuflClef.treble);
-    final bassColor = _clefInk(style, SmuflClef.bass);
+    final colors = (
+      treble: _clefInk(style, SmuflClef.treble),
+      bass: _clefInk(style, SmuflClef.bass),
+    );
     ScoreStaffBackdropPainter.paintSystemBackdrop(
       canvas: canvas,
       system: system,
       style: style,
-      trebleColor: trebleColor,
-      bassColor: bassColor,
+      colors: colors,
     );
     for (final measure in system.measures) {
-      _paintMeasure(canvas, system, measure, style, trebleColor, bassColor);
+      _paintMeasure(canvas, system, measure, style, colors);
     }
   }
 
@@ -92,17 +96,34 @@ class GrandStaffScorePainter extends CustomPainter {
     SystemGeometry system,
     MeasureGeometry measure,
     ScoreStyle style,
-    Color trebleColor,
-    Color bassColor,
+    ({Color treble, Color bass}) colors,
   ) {
-    final sp = system.staffSpace;
+    _paintMeasureHeader(canvas, system, measure, style, colors);
+    _paintMeasureSlices(canvas, system, measure, style, colors);
+    _paintMeasureOrnaments(canvas, measure, system.staffSpace, colors);
+    ScorePainterChordRenderer.paintRightBarline(
+      canvas,
+      system,
+      measure,
+      style,
+      system.staffSpace,
+    );
+  }
+
+  void _paintMeasureHeader(
+    Canvas canvas,
+    SystemGeometry system,
+    MeasureGeometry measure,
+    ScoreStyle style,
+    ({Color treble, Color bass}) colors,
+  ) {
     for (final acc in measure.keyAccidentals) {
       paintSmuflGlyph(
         canvas: canvas,
         glyph: acc.glyph,
         anchor: Offset(acc.centerX, acc.centerY),
         fontSize: style.fontSize,
-        color: acc.clef == SmuflClef.treble ? trebleColor : bassColor,
+        color: acc.clef == SmuflClef.treble ? colors.treble : colors.bass,
         fontFamily: style.fontFamily,
         fontPackage: style.fontPackage,
       );
@@ -114,50 +135,65 @@ class GrandStaffScorePainter extends CustomPainter {
       ScorePainterOrnaments.paintTimeSignature(
         canvas: canvas,
         system: system,
-        centerX: measure.timeSigCenterX!,
-        beats: measure.beats!,
-        beatType: measure.beatType!,
+        measure: measure,
         style: style,
-        trebleColor: trebleColor,
-        bassColor: bassColor,
+        colors: colors,
       );
     }
+  }
+
+  void _paintMeasureSlices(
+    Canvas canvas,
+    SystemGeometry system,
+    MeasureGeometry measure,
+    ScoreStyle style,
+    ({Color treble, Color bass}) colors,
+  ) {
+    final sp = system.staffSpace;
     for (final slice in measure.slices) {
       ScorePainterChordRenderer.paintChord(
         canvas,
         system,
         slice.trebleChord,
         style,
-        trebleColor,
+        colors.treble,
       );
       ScorePainterChordRenderer.paintChord(
         canvas,
         system,
         slice.bassChord,
         style,
-        bassColor,
+        colors.bass,
       );
       ScorePainterChordRenderer.paintRest(
         canvas,
         slice.trebleRest,
         style,
-        trebleColor,
+        colors.treble,
         sp,
       );
       ScorePainterChordRenderer.paintRest(
         canvas,
         slice.bassRest,
         style,
-        bassColor,
+        colors.bass,
         sp,
       );
     }
+  }
+
+  void _paintMeasureOrnaments(
+    Canvas canvas,
+    MeasureGeometry measure,
+    double sp,
+    ({Color treble, Color bass}) colors,
+  ) {
     for (final beam in measure.beamGroups) {
       ScorePainterOrnaments.paintBeamGroup(
         canvas: canvas,
         group: beam,
         staffSpace: sp,
-        color: beam.clef == SmuflClef.treble ? trebleColor : bassColor,
+        color: beam.clef == SmuflClef.treble ? colors.treble : colors.bass,
       );
     }
     for (final tie in measure.tieArcs) {
@@ -165,16 +201,9 @@ class GrandStaffScorePainter extends CustomPainter {
         canvas: canvas,
         tie: tie,
         staffSpace: sp,
-        color: tie.clef == SmuflClef.treble ? trebleColor : bassColor,
+        color: tie.clef == SmuflClef.treble ? colors.treble : colors.bass,
       );
     }
-    ScorePainterChordRenderer.paintRightBarline(
-      canvas,
-      system,
-      measure,
-      style,
-      sp,
-    );
   }
 
   Color _clefInk(ScoreStyle style, SmuflClef clef) => dimmedClef == clef
