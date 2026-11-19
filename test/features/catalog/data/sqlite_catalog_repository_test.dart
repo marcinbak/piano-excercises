@@ -331,6 +331,130 @@ void main() {
       );
       expect(filtered.map((p) => p.id), ['a_piece']);
     });
+
+    test('applyBatch inserts 125 pieces + attachments in one transaction, syncs FTS, and rolls back atomically on error', () async {
+      final cMajor = Scale.fromKeySignature(KeySignature.cMajor);
+      await repo.createPiece(
+        Piece(
+          id: 'existing_1',
+          title: 'Mikrokosmos No. 1',
+          artist: 'Béla Bartók',
+          scale: cMajor,
+          variants: <ScoreVariant>[
+            ScoreVariant(
+              id: 'existing_v1',
+              pieceId: 'existing_1',
+              difficultyTier: DifficultyTier.beginner,
+              label: 'Beginner',
+              fileName: 'mikrokosmos_01.mxl',
+              storedRelativePath: 'scores/existing_v1.mxl',
+              importedAtMs: 1,
+            ),
+          ],
+        ),
+      );
+
+      final batchPieces = <Piece>[
+        for (var i = 0; i < 125; i += 1)
+          Piece(
+            id: 'batch_p_$i',
+            title: i == 42 ? 'Étude Op. 25' : 'Exercise $i',
+            artist: i == 42 ? 'Frédéric Chopin' : 'Composer $i',
+            scale: cMajor,
+            variants: <ScoreVariant>[
+              ScoreVariant(
+                id: 'batch_v_$i',
+                pieceId: 'batch_p_$i',
+                difficultyTier: DifficultyTier.intermediate,
+                label: 'Intermediate',
+                fileName: 'exercise_$i.mxl',
+                storedRelativePath: 'scores/batch_v_$i.mxl',
+                importedAtMs: 100 + i,
+              ),
+            ],
+          ),
+      ];
+
+      await repo.applyBatch(
+        CatalogBatchMutation(
+          newPieces: batchPieces,
+          attachments: <CatalogBatchPieceAttachment>[
+            CatalogBatchPieceAttachment(
+              pieceId: 'existing_1',
+              variants: <ScoreVariant>[
+                ScoreVariant(
+                  id: 'existing_v2',
+                  pieceId: 'existing_1',
+                  difficultyTier: DifficultyTier.elementary,
+                  label: 'Elementary',
+                  fileName: 'bartok_urtext_k99.mxl',
+                  storedRelativePath: 'scores/existing_v2.mxl',
+                  importedAtMs: 999,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+
+      expect(await repo.countPieces(), 126);
+      expect(
+        (await repo.queryPieces(const CatalogQuery(searchText: 'chopin')))
+            .map((p) => p.id),
+        <String>['batch_p_42'],
+      );
+      expect(
+        (await repo.queryPieces(const CatalogQuery(searchText: 'k99')))
+            .map((p) => p.id),
+        <String>['existing_1'],
+      );
+
+      // Invalid attachment rolls back the entire transaction including newPieces.
+      await expectLater(
+        () => repo.applyBatch(
+          CatalogBatchMutation(
+            newPieces: <Piece>[
+              Piece(
+                id: 'rollback_piece',
+                title: 'Should Rollback',
+                artist: 'Test',
+                scale: cMajor,
+                variants: <ScoreVariant>[
+                  ScoreVariant(
+                    id: 'rollback_v',
+                    pieceId: 'rollback_piece',
+                    difficultyTier: DifficultyTier.beginner,
+                    label: 'Beginner',
+                    fileName: 'rollback.mxl',
+                    storedRelativePath: 'scores/rollback_v.mxl',
+                    importedAtMs: 1000,
+                  ),
+                ],
+              ),
+            ],
+            attachments: <CatalogBatchPieceAttachment>[
+              CatalogBatchPieceAttachment(
+                pieceId: 'missing_piece',
+                variants: <ScoreVariant>[
+                  ScoreVariant(
+                    id: 'missing_v',
+                    pieceId: 'missing_piece',
+                    difficultyTier: DifficultyTier.beginner,
+                    label: 'Beginner',
+                    fileName: 'missing.mxl',
+                    storedRelativePath: 'scores/missing_v.mxl',
+                    importedAtMs: 1001,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        throwsA(isA<CatalogStorageException>()),
+      );
+      expect(await repo.countPieces(), 126);
+      expect(await repo.getPieceById('rollback_piece'), isNull);
+    });
   });
 
   group('Android FTS4 fallback contract', () {

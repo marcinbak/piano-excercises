@@ -5,12 +5,13 @@ import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_repository.dart';
 import 'package:piano_exercises/features/catalog/domain/piece.dart';
 import 'package:piano_exercises/features/catalog/state/catalog_providers.dart';
+import 'package:piano_exercises/features/catalog/ui/batch_score_import_sheet.dart';
 import 'package:piano_exercises/features/catalog/ui/catalog_feedback_views.dart';
 import 'package:piano_exercises/features/catalog/ui/catalog_filter_bar.dart';
 import 'package:piano_exercises/features/catalog/ui/piece_catalog_card.dart';
 import 'package:piano_exercises/features/catalog/ui/score_import_sheet.dart';
 
-/// Displays the searchable piece catalog and runtime `.mxl`/`.musicxml` importer.
+/// Displays the searchable piece catalog and runtime score importer.
 class CatalogScreen extends ConsumerStatefulWidget {
   const CatalogScreen({
     super.key,
@@ -140,39 +141,50 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     }
     setState(() => _isPickingFile = true);
     try {
-      final candidate = await ref
+      final selection = await ref
           .read(catalogControllerProvider.notifier)
-          .pickCandidate();
-      if (!mounted || candidate == null) {
+          .pickSelection();
+      if (!mounted || selection == null) {
         return;
       }
-      final List<Piece> existingPieces;
-      try {
-        existingPieces = await ref
-            .read(catalogRepositoryProvider)
-            .queryPieces();
-      } catch (error) {
-        if (mounted) {
-          final message = error is CatalogStorageException
-              ? error.message
-              : error.toString();
-          ref.read(catalogErrorProvider.notifier).setError(message);
-        }
+      final existingPieces = await _loadExistingPieces();
+      if (!mounted || existingPieces == null) {
         return;
       }
-      if (!mounted) {
-        return;
+      if (selection.shouldUseSingleScoreSheet(
+        hasInitialTargetPiece: initialTargetPiece != null,
+      )) {
+        await ScoreImportSheet.show(
+          context,
+          candidate: selection.candidates.single,
+          existingPieces: existingPieces,
+          initialTargetPiece: initialTargetPiece,
+        );
+      } else {
+        await BatchScoreImportSheet.show(
+          context,
+          selection: selection,
+          existingPieces: existingPieces,
+        );
       }
-      await ScoreImportSheet.show(
-        context,
-        candidate: candidate,
-        existingPieces: existingPieces,
-        initialTargetPiece: initialTargetPiece,
-      );
     } finally {
       if (mounted) {
         setState(() => _isPickingFile = false);
       }
+    }
+  }
+
+  Future<List<Piece>?> _loadExistingPieces() async {
+    try {
+      return await ref.read(catalogRepositoryProvider).queryPieces();
+    } catch (error) {
+      if (mounted) {
+        final message = error is CatalogStorageException
+            ? error.message
+            : error.toString();
+        ref.read(catalogErrorProvider.notifier).setError(message);
+      }
+      return null;
     }
   }
 

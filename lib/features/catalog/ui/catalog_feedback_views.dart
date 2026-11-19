@@ -58,7 +58,8 @@ class CatalogEmptyState extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             const Text(
-              'No pieces in your catalog yet.\nImport a .mxl or .musicxml score.',
+              'No pieces in your catalog yet.\n'
+              'Import a .mxl, .musicxml, or .zip score bundle.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),

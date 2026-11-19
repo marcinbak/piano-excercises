@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:piano_exercises/features/catalog/domain/catalog_batch_import_planner.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_import_coordinator.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_query.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_repository.dart';
@@ -88,19 +89,25 @@ class CatalogController extends AsyncNotifier<CatalogSnapshot> {
     return _loadSnapshot(repository, query);
   }
 
-  Future<ImportedScoreCandidate?> pickCandidate() async {
+  Future<ScoreImportSelection?> pickSelection() async {
     ref.read(catalogErrorProvider.notifier).clear();
     try {
-      final candidate = await ref
+      final selection = await ref
           .read(scoreImportSourceProvider)
-          .pickAndParseScore();
-      return ref.mounted ? candidate : null;
+          .pickAndParseScores();
+      return ref.mounted ? selection : null;
     } catch (error) {
       if (ref.mounted) {
         ref.read(catalogErrorProvider.notifier).setError(_formatError(error));
       }
       return null;
     }
+  }
+
+  Future<CatalogBatchImportResult?> importBatch(CatalogBatchImportPlan plan) {
+    return _runMutation(
+      () => ref.read(catalogImportCoordinatorProvider).executeBatchImport(plan),
+    );
   }
 
   Future<Piece?> importAsNewPiece({

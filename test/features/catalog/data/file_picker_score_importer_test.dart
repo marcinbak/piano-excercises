@@ -62,86 +62,121 @@ Uint8List _wrapMxl(Uint8List musicXmlBytes) {
   return Uint8List.fromList(ZipEncoder().encode(archive)!);
 }
 
+Uint8List _wrapBundleZip(Map<String, Uint8List> entries) {
+  final archive = Archive();
+  for (final entry in entries.entries) {
+    archive.addFile(ArchiveFile(entry.key, entry.value.length, entry.value));
+  }
+  return Uint8List.fromList(ZipEncoder().encode(archive)!);
+}
+
 void main() {
   test('returns null when picker is cancelled', () async {
-    final importer = FilePickerScoreImporter(pickFile: () async => null);
-    expect(await importer.pickAndParseScore(), isNull);
+    final importer = FilePickerScoreImporter(
+      pickFiles: () async => const <PlatformFile>[],
+    );
+    expect(await importer.pickAndParseScores(), isNull);
   });
 
   test(
-    'rejects unsupported extension, empty payload, and >maxBytes streaming cap',
+    'rejects unsupported extension, empty payload, >maxBytes, and >500 files',
     () async {
       final badExt = FilePickerScoreImporter(
-        pickFile: () async => _FakePlatformFile(
-          name: 'score.pdf',
-          knownLength: 4,
-          chunks: <Uint8List>[
-            Uint8List.fromList(<int>[1, 2, 3, 4]),
-          ],
-        ),
+        pickFiles: () async => <PlatformFile>[
+          _FakePlatformFile(
+            name: 'score.pdf',
+            knownLength: 4,
+            chunks: <Uint8List>[
+              Uint8List.fromList(<int>[1, 2, 3, 4]),
+            ],
+          ),
+        ],
       );
       await expectLater(
-        badExt.pickAndParseScore,
+        badExt.pickAndParseScores,
         throwsA(isA<ScoreParseException>()),
       );
 
       final emptyFile = FilePickerScoreImporter(
-        pickFile: () async => _FakePlatformFile(
-          name: 'empty.musicxml',
-          knownLength: null,
-          chunks: const <Uint8List>[],
-        ),
+        pickFiles: () async => <PlatformFile>[
+          _FakePlatformFile(
+            name: 'empty.musicxml',
+            knownLength: null,
+            chunks: const <Uint8List>[],
+          ),
+        ],
       );
       await expectLater(
-        emptyFile.pickAndParseScore,
+        emptyFile.pickAndParseScores,
         throwsA(isA<ScoreParseException>()),
       );
 
       final oversizedSync = FilePickerScoreImporter(
         maxBytes: 100,
-        pickFile: () async => _FakePlatformFile(
-          name: 'big.mxl',
-          knownLength: 101,
-          chunks: const <Uint8List>[],
-        ),
+        pickFiles: () async => <PlatformFile>[
+          _FakePlatformFile(
+            name: 'big.mxl',
+            knownLength: 101,
+            chunks: const <Uint8List>[],
+          ),
+        ],
       );
       await expectLater(
-        oversizedSync.pickAndParseScore,
+        oversizedSync.pickAndParseScores,
         throwsA(isA<ScoreParseException>()),
       );
 
       final oversizedStream = FilePickerScoreImporter(
         maxBytes: 100,
-        pickFile: () async => _FakePlatformFile(
-          name: 'big_stream.musicxml',
-          knownLength: null,
-          chunks: <Uint8List>[Uint8List(60), Uint8List(41)],
+        pickFiles: () async => <PlatformFile>[
+          _FakePlatformFile(
+            name: 'big_stream.musicxml',
+            knownLength: null,
+            chunks: <Uint8List>[Uint8List(60), Uint8List(41)],
+          ),
+        ],
+      );
+      await expectLater(
+        oversizedStream.pickAndParseScores,
+        throwsA(isA<ScoreParseException>()),
+      );
+
+      final tooManyFiles = FilePickerScoreImporter(
+        pickFiles: () async => List<PlatformFile>.generate(
+          501,
+          (i) => _FakePlatformFile(
+            name: 'score_$i.musicxml',
+            knownLength: 10,
+            chunks: <Uint8List>[Uint8List(10)],
+          ),
         ),
       );
       await expectLater(
-        oversizedStream.pickAndParseScore,
+        tooManyFiles.pickAndParseScores,
         throwsA(isA<ScoreParseException>()),
       );
     },
   );
 
-  test('parses valid .musicxml and .mxl files from stream', () async {
+  test('parses valid single .musicxml and .mxl files from stream', () async {
     final xmlBytes = File('test/fixtures/simplified_melody_bass.musicxml')
         .readAsBytesSync();
 
     final xmlImporter = FilePickerScoreImporter(
-      pickFile: () async => _FakePlatformFile(
-        name: 'simplified_melody_bass.musicxml',
-        knownLength: xmlBytes.length,
-        chunks: <Uint8List>[xmlBytes.sublist(0, 128), xmlBytes.sublist(128)],
-      ),
+      pickFiles: () async => <PlatformFile>[
+        _FakePlatformFile(
+          name: 'simplified_melody_bass.musicxml',
+          knownLength: xmlBytes.length,
+          chunks: <Uint8List>[xmlBytes.sublist(0, 128), xmlBytes.sublist(128)],
+        ),
+      ],
     );
-    final xmlCandidate = await xmlImporter.pickAndParseScore();
-    expect(xmlCandidate, isNotNull);
-    expect(
-      xmlCandidate!.parsedScore.metadata.title,
-      'Simplified Melody + Bass',
-    );
+    final xmlSelection = await xmlImporter.pickAndParseScores();
+    expect(xmlSelection, isNotNull);
+    expect(xmlSelection!.isBundle, isFalse);
+    expect(xmlSelection.candidates, hasLength(1));
+    final xmlCandidate = xmlSelection.candidates.single;
+    expect(xmlCandidate.parsedScore.metadata.title, 'Simplified Melody + Bass');
     expect(
       xmlCandidate.parsedScore.metadata.sourceFormat,
       ScoreFormat.musicXml,
@@ -149,15 +184,99 @@ void main() {
 
     final mxlBytes = _wrapMxl(xmlBytes);
     final mxlImporter = FilePickerScoreImporter(
-      pickFile: () async => _FakePlatformFile(
-        name: 'simplified.MXL',
-        knownLength: mxlBytes.length,
-        chunks: <Uint8List>[mxlBytes],
-      ),
+      pickFiles: () async => <PlatformFile>[
+        _FakePlatformFile(
+          name: 'simplified.MXL',
+          knownLength: mxlBytes.length,
+          chunks: <Uint8List>[mxlBytes],
+        ),
+      ],
     );
-    final mxlCandidate = await mxlImporter.pickAndParseScore();
-    expect(mxlCandidate, isNotNull);
-    expect(mxlCandidate!.parsedScore.metadata.scale.label, 'G Major');
-    expect(mxlCandidate.parsedScore.metadata.sourceFormat, ScoreFormat.mxl);
+    final mxlSelection = await mxlImporter.pickAndParseScores();
+    expect(mxlSelection, isNotNull);
+    expect(
+      mxlSelection!.candidates.single.parsedScore.metadata.scale.label,
+      'G Major',
+    );
+    expect(
+      mxlSelection.candidates.single.parsedScore.metadata.sourceFormat,
+      ScoreFormat.mxl,
+    );
+  });
+
+  test('parses .zip bundle and multi-file selections with partial failures and cumulative cap', () async {
+    final xmlBytes = File('test/fixtures/simplified_melody_bass.musicxml')
+        .readAsBytesSync();
+    final mxlBytes = _wrapMxl(xmlBytes);
+    final zipBytes = _wrapBundleZip(<String, Uint8List>{
+      'beginner/simple.mxl': mxlBytes,
+      'readme.txt': Uint8List.fromList(utf8.encode('notes')),
+    });
+
+    final zipImporter = FilePickerScoreImporter(
+      pickFiles: () async => <PlatformFile>[
+        _FakePlatformFile(
+          name: 'bundle.zip',
+          knownLength: zipBytes.length,
+          chunks: <Uint8List>[zipBytes],
+        ),
+      ],
+    );
+    final zipSelection = await zipImporter.pickAndParseScores();
+    expect(zipSelection, isNotNull);
+    expect(zipSelection!.isBundle, isTrue);
+    expect(zipSelection.candidates, hasLength(1));
+    expect(zipSelection.ignoredNonScoreCount, 1);
+    expect(
+      zipSelection.shouldUseSingleScoreSheet(hasInitialTargetPiece: false),
+      isFalse,
+    );
+    expect(
+      zipSelection.shouldUseSingleScoreSheet(hasInitialTargetPiece: true),
+      isTrue,
+    );
+
+    final multiImporter = FilePickerScoreImporter(
+      pickFiles: () async => <PlatformFile>[
+        _FakePlatformFile(
+          name: 'good.musicxml',
+          knownLength: xmlBytes.length,
+          chunks: <Uint8List>[xmlBytes],
+        ),
+        _FakePlatformFile(
+          name: 'broken.mxl',
+          knownLength: 4,
+          chunks: <Uint8List>[
+            Uint8List.fromList(<int>[1, 2, 3, 4]),
+          ],
+        ),
+      ],
+    );
+    final multiSelection = await multiImporter.pickAndParseScores();
+    expect(multiSelection, isNotNull);
+    expect(multiSelection!.candidates, hasLength(1));
+    expect(multiSelection.failures, hasLength(1));
+    expect(multiSelection.failures.single.sourceName, 'broken.mxl');
+
+    final overBundleCap = FilePickerScoreImporter(
+      maxBytes: 10000,
+      maxBundleBytes: xmlBytes.length + 10,
+      pickFiles: () async => <PlatformFile>[
+        _FakePlatformFile(
+          name: 'one.musicxml',
+          knownLength: xmlBytes.length,
+          chunks: <Uint8List>[xmlBytes],
+        ),
+        _FakePlatformFile(
+          name: 'two.musicxml',
+          knownLength: xmlBytes.length,
+          chunks: <Uint8List>[xmlBytes],
+        ),
+      ],
+    );
+    await expectLater(
+      overBundleCap.pickAndParseScores,
+      throwsA(isA<ScoreParseException>()),
+    );
   });
 }

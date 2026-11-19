@@ -49,6 +49,10 @@ class _ControllableCatalogRepository implements CatalogRepository {
   Future<Piece> createPiece(Piece piece) => _delegate.createPiece(piece);
 
   @override
+  Future<void> applyBatch(CatalogBatchMutation batch) =>
+      _delegate.applyBatch(batch);
+
+  @override
   Future<void> deletePiece(String pieceId) => _delegate.deletePiece(pieceId);
 
   @override
@@ -249,6 +253,76 @@ void main() {
       expect(
         container.read(catalogErrorProvider),
         'Simulated disk unlink failure',
+      );
+    },
+  );
+
+  test(
+    'importBatch reloads CatalogSnapshot once after committing a batch',
+    () async {
+      final repo = _ControllableCatalogRepository();
+      final store = InMemoryScoreFileStore();
+      var nextId = 0;
+
+      final container = ProviderContainer(
+        overrides: [
+          catalogRepositoryProvider.overrideWith((ref) {
+            ref.onDispose(repo.close);
+            return repo;
+          }),
+          scoreFileStoreProvider.overrideWithValue(store),
+          catalogClockMsProvider.overrideWithValue(() => 1700000000000),
+          catalogIdGeneratorProvider.overrideWithValue(() => 'id_${++nextId}'),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(catalogControllerProvider.future);
+      repo.queryPiecesCalls = 0;
+
+      final cMajor = Scale.fromKeySignature(KeySignature.cMajor);
+      ImportedScoreCandidate candidate(String name, String title) {
+        final score = Score(
+          title: title,
+          artist: 'Bartók',
+          scale: cMajor,
+          timeSignature: TimeSignature.common,
+          measures: const <ScoreMeasure>[],
+        );
+        return ImportedScoreCandidate(
+          fileName: name,
+          bytes: Uint8List.fromList(name.codeUnits),
+          parsedScore: ParsedScore(
+            score: score,
+            metadata: ScoreMetadata(
+              title: title,
+              artist: 'Bartók',
+              scale: cMajor,
+              timeSignature: TimeSignature.common,
+              measureCount: 1,
+              sourceFormat: ScoreFormat.mxl,
+            ),
+          ),
+        );
+      }
+
+      final plan = CatalogBatchImportPlanner.plan(
+        existingPieces: const <Piece>[],
+        candidates: <ImportedScoreCandidate>[
+          candidate('a.mxl', 'Piece A'),
+          candidate('b.mxl', 'Piece B'),
+          candidate('c.mxl', 'Piece C'),
+        ],
+      );
+      final result = await container
+          .read(catalogControllerProvider.notifier)
+          .importBatch(plan);
+
+      expect(result?.createdPieceCount, 3);
+      expect(repo.queryPiecesCalls, 1);
+      expect(
+        container.read(catalogControllerProvider).value?.pieces,
+        hasLength(3),
       );
     },
   );

@@ -12,9 +12,11 @@ abstract final class MxlEntryValidator {
     Uint8List bytes,
     List<ZipFileHeader> headers, {
     required int maxUncompressedBytes,
+    int? maxSingleEntryBytes,
   }) {
     final headersByPath = <String, ZipFileHeader>{};
     var cumulativeDeclaredUncompressed = 0;
+    final singleLimit = maxSingleEntryBytes ?? maxUncompressedBytes;
 
     for (final header in headers) {
       final file = header.file;
@@ -30,7 +32,8 @@ abstract final class MxlEntryValidator {
       _validateFlagsAndSizes(
         header,
         file,
-        maxUncompressedBytes: maxUncompressedBytes,
+        maxCompressedBytes: maxUncompressedBytes,
+        maxSingleUncompressedBytes: singleLimit,
       );
       final declared = math.max(
         header.uncompressedSize!,
@@ -130,7 +133,8 @@ abstract final class MxlEntryValidator {
   static void _validateFlagsAndSizes(
     ZipFileHeader header,
     ZipFile file, {
-    required int maxUncompressedBytes,
+    required int maxCompressedBytes,
+    required int maxSingleUncompressedBytes,
   }) {
     final externalAttrs = header.externalFileAttributes ?? 0;
     if (((externalAttrs >> 16) & 0xF000) == 0xA000) {
@@ -165,10 +169,10 @@ abstract final class MxlEntryValidator {
         hUncomp < 0 ||
         fComp < 0 ||
         fUncomp < 0 ||
-        hComp > maxUncompressedBytes ||
-        hUncomp > maxUncompressedBytes ||
-        fComp > maxUncompressedBytes ||
-        fUncomp > maxUncompressedBytes ||
+        hComp > maxCompressedBytes ||
+        hUncomp > maxSingleUncompressedBytes ||
+        fComp > maxCompressedBytes ||
+        fUncomp > maxSingleUncompressedBytes ||
         raw == null ||
         raw.length != fComp) {
       throw const ScoreParseException(

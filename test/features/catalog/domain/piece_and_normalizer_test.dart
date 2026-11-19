@@ -370,5 +370,84 @@ void main() {
       expect(await repo.getPieceById('p2'), isNull);
       expect(await repo.listAvailableScales(), [fSharp]);
     });
+
+    test(
+      'applyBatch validates all constraints atomically before mutating state',
+      () async {
+        final repo = InMemoryCatalogRepository();
+        addTearDown(repo.close);
+        final cMajor = Scale.fromKeySignature(KeySignature.cMajor);
+
+        await repo.applyBatch(
+          CatalogBatchMutation(
+            newPieces: <Piece>[
+              Piece(
+                id: 'p1',
+                title: 'Piece 1',
+                artist: 'Composer',
+                scale: cMajor,
+                variants: <ScoreVariant>[
+                  ScoreVariant(
+                    id: 'v1',
+                    pieceId: 'p1',
+                    difficultyTier: DifficultyTier.beginner,
+                    label: 'Beginner',
+                    fileName: 'p1.mxl',
+                    storedRelativePath: 'scores/v1.mxl',
+                    importedAtMs: 1,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+
+        // Invalid attachment pieceId must reject entire batch without inserting p2.
+        await expectLater(
+          () => repo.applyBatch(
+            CatalogBatchMutation(
+              newPieces: <Piece>[
+                Piece(
+                  id: 'p2',
+                  title: 'Piece 2',
+                  artist: 'Composer',
+                  scale: cMajor,
+                  variants: <ScoreVariant>[
+                    ScoreVariant(
+                      id: 'v2',
+                      pieceId: 'p2',
+                      difficultyTier: DifficultyTier.beginner,
+                      label: 'Beginner',
+                      fileName: 'p2.mxl',
+                      storedRelativePath: 'scores/v2.mxl',
+                      importedAtMs: 2,
+                    ),
+                  ],
+                ),
+              ],
+              attachments: <CatalogBatchPieceAttachment>[
+                CatalogBatchPieceAttachment(
+                  pieceId: 'missing_piece',
+                  variants: <ScoreVariant>[
+                    ScoreVariant(
+                      id: 'v3',
+                      pieceId: 'missing_piece',
+                      difficultyTier: DifficultyTier.advanced,
+                      label: 'Advanced',
+                      fileName: 'p3.mxl',
+                      storedRelativePath: 'scores/v3.mxl',
+                      importedAtMs: 3,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          throwsA(isA<CatalogStorageException>()),
+        );
+        expect(await repo.countPieces(), 1);
+        expect(await repo.getPieceById('p2'), isNull);
+      },
+    );
   });
 }

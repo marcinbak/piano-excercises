@@ -6,22 +6,63 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
 import 'package:piano_exercises/features/catalog/ui/score_import_sheet.dart';
+import 'package:piano_exercises/shared/music/music.dart';
 
 class _QueuedScoreImportSource implements ScoreImportSource {
-  final List<Future<ImportedScoreCandidate?> Function()> _queue =
-      <Future<ImportedScoreCandidate?> Function()>[];
+  final List<Future<ScoreImportSelection?> Function()> _queue =
+      <Future<ScoreImportSelection?> Function()>[];
 
   void enqueue(Future<ImportedScoreCandidate?> Function() action) {
+    _queue.add(() async {
+      final candidate = await action();
+      return candidate == null ? null : ScoreImportSelection.single(candidate);
+    });
+  }
+
+  void enqueueSelection(Future<ScoreImportSelection?> Function() action) {
     _queue.add(action);
   }
 
   @override
-  Future<ImportedScoreCandidate?> pickAndParseScore() {
+  Future<ScoreImportSelection?> pickAndParseScores() {
     if (_queue.isEmpty) {
-      return Future<ImportedScoreCandidate?>.value();
+      return Future<ScoreImportSelection?>.value();
     }
     return _queue.removeAt(0)();
   }
+}
+
+ImportedScoreCandidate _syntheticCandidate({
+  required String fileName,
+  String? archiveEntryPath,
+  required String title,
+  required String artist,
+  required List<int> bytes,
+}) {
+  final scale = Scale.fromKeySignature(KeySignature.cMajor);
+  final score = Score(
+    title: title,
+    artist: artist,
+    scale: scale,
+    timeSignature: TimeSignature.common,
+    measures: const <ScoreMeasure>[],
+  );
+  return ImportedScoreCandidate(
+    fileName: fileName,
+    archiveEntryPath: archiveEntryPath,
+    bytes: Uint8List.fromList(bytes),
+    parsedScore: ParsedScore(
+      score: score,
+      metadata: ScoreMetadata(
+        title: title,
+        artist: artist,
+        scale: scale,
+        timeSignature: TimeSignature.common,
+        measureCount: 1,
+        sourceFormat: ScoreFormat.mxl,
+      ),
+    ),
+  );
 }
 
 ImportedScoreCandidate _fixtureCandidate(
@@ -475,6 +516,196 @@ void main() {
         ('piece_1', 'var_2'),
         ('piece_1', 'var_1'),
       ]);
+    },
+  );
+
+  testWidgets(
+    'routes .zip/multi-score picks to BatchScoreImportSheet, supports tier override and idempotent re-import, and keeps card + single-score routing',
+    (tester) async {
+      final repo = InMemoryCatalogRepository();
+      final store = InMemoryScoreFileStore();
+      final importSource = _QueuedScoreImportSource();
+
+      final batchCandidates = <ImportedScoreCandidate>[
+        _syntheticCandidate(
+          fileName: 'mikrokosmos_vol1.mxl',
+          archiveEntryPath: 'vol1/mikrokosmos_vol1.mxl',
+          title: 'Mikrokosmos No. 1',
+          artist: 'Béla Bartók',
+          bytes: const <int>[1, 2],
+        ),
+        _syntheticCandidate(
+          fileName: 'etude.mxl',
+          archiveEntryPath: 'advanced/etude.mxl',
+          title: 'Etude Op. 10',
+          artist: 'Chopin',
+          bytes: const <int>[3, 4],
+        ),
+      ];
+      final batchSelection = ScoreImportSelection(
+        candidates: batchCandidates,
+        failures: const <ScoreImportFailure>[
+          ScoreImportFailure(
+            sourceName: 'corrupt.mxl',
+            message: 'Invalid ZIP container.',
+          ),
+        ],
+        ignoredNonScoreCount: 1,
+        isBundle: true,
+      );
+
+      await tester.pumpWidget(
+        _buildCatalogTestApp(
+          repo: repo,
+          store: store,
+          importSource: importSource,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 1. Bundle pick opens BatchScoreImportSheet with summary counts & auto-detected tiers.
+      importSource.enqueueSelection(() async => batchSelection);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('catalog-empty-import-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BatchScoreImportSheet), findsOneWidget);
+      expect(find.byType(ScoreImportSheet), findsNothing);
+      expect(find.text('2 new pieces'), findsOneWidget);
+      expect(find.text('1 ignored non-score file'), findsOneWidget);
+      expect(find.text('1 failed'), findsOneWidget);
+      expect(
+        find.textContaining('Tier 1: Beginner (mikrokosmos_vol1.mxl)'),
+        findsOneWidget,
+      );
+
+      // Toggle 'One tier for all' -> select Elementary (tier 2) and submit.
+      await tester.tap(
+        find.byKey(const ValueKey<String>('batch-tier-mode-override')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('batch-tier-chip-2')));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Tier 2: Elementary (mikrokosmos_vol1.mxl)'),
+        findsOneWidget,
+      );
+
+      final submitBtn = find.byKey(
+        const ValueKey<String>('batch-import-submit-button'),
+      );
+      expect(find.text('Import 2 Scores'), findsOneWidget);
+      await tester.ensureVisible(submitBtn);
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BatchScoreImportSheet), findsNothing);
+      expect(find.text('Mikrokosmos No. 1'), findsOneWidget);
+      expect(find.text('Etude Op. 10'), findsOneWidget);
+      expect(find.text('Tier 2: Elementary'), findsNWidgets(2));
+
+      // 2. Idempotent re-import of the same bundle shows 0 new, 2 duplicates skipped, and Close button.
+      importSource.enqueueSelection(() async => batchSelection);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('catalog-import-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('0 new pieces'), findsOneWidget);
+      expect(find.text('2 duplicates skipped'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey<String>('batch-import-submit-button')),
+        findsNothing,
+      );
+      final closeBtn = find.byKey(
+        const ValueKey<String>('batch-import-close-button'),
+      );
+      await tester.ensureVisible(closeBtn);
+      await tester.tap(closeBtn);
+      await tester.pumpAndSettle();
+      expect(find.byType(BatchScoreImportSheet), findsNothing);
+
+      // 3. Single-candidate bundle routed to ScoreImportSheet when launched from card '+' attach button.
+      final attachCandidate = _syntheticCandidate(
+        fileName: 'attach_hard.mxl',
+        archiveEntryPath: 'hard/attach_hard.mxl',
+        title: 'Ignored Title',
+        artist: 'Ignored',
+        bytes: const <int>[99, 100],
+      );
+      importSource.enqueueSelection(
+        () async => ScoreImportSelection(
+          candidates: <ImportedScoreCandidate>[attachCandidate],
+          isBundle: true,
+        ),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey<String>('piece-attach-variant-button-id_1')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ScoreImportSheet), findsOneWidget);
+      expect(find.byType(BatchScoreImportSheet), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'CatalogScreen and BatchScoreImportSheet render with zero overflow at 800x360 @ 1.6x',
+    (tester) async {
+      final repo = InMemoryCatalogRepository();
+      final store = InMemoryScoreFileStore();
+      final importSource = _QueuedScoreImportSource();
+
+      tester.view.physicalSize = const Size(800, 360);
+      tester.view.devicePixelRatio = 1.0;
+      tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+      addTearDown(() {
+        tester.view.reset();
+        tester.platformDispatcher.clearTextScaleFactorTestValue();
+      });
+
+      final largeSelection = ScoreImportSelection(
+        candidates: <ImportedScoreCandidate>[
+          for (var i = 0; i < 25; i += 1)
+            _syntheticCandidate(
+              fileName: 'piece_$i.mxl',
+              archiveEntryPath: 'vol1/piece_$i.mxl',
+              title: 'Long Study Number $i in C Major',
+              artist: 'Composer $i',
+              bytes: <int>[i + 1],
+            ),
+        ],
+        failures: <ScoreImportFailure>[
+          for (var i = 0; i < 7; i += 1)
+            ScoreImportFailure(
+              sourceName: 'bad_$i.mxl',
+              message: 'Corrupt XML structure in entry $i',
+            ),
+        ],
+        ignoredNonScoreCount: 2,
+        isBundle: true,
+      );
+
+      await tester.pumpWidget(
+        _buildCatalogTestApp(
+          repo: repo,
+          store: store,
+          importSource: importSource,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+
+      importSource.enqueueSelection(() async => largeSelection);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('catalog-import-button')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(BatchScoreImportSheet), findsOneWidget);
+      expect(find.text('...and 2 more'), findsOneWidget);
+      expect(find.text('...and 5 more'), findsOneWidget);
     },
   );
 }
