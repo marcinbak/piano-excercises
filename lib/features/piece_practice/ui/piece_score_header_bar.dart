@@ -2,44 +2,92 @@ import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
 import 'package:piano_exercises/features/piece_practice/domain/hand_mode.dart';
 
-/// Cursor indicator and navigation callbacks displayed in [PieceScoreHeaderBar].
-final class PieceScoreCursorBarData {
-  const PieceScoreCursorBarData({
-    required this.measureNumber,
-    required this.measureCount,
-    required this.canStepPrev,
-    required this.canStepNext,
+/// Variant selection binding for [PieceScoreHeaderBar].
+final class PieceScoreVariantControl {
+  const PieceScoreVariantControl({
+    required this.selectedVariant,
+    required this.onSelectVariant,
+  });
+
+  final ScoreVariant selectedVariant;
+  final ValueChanged<ScoreVariant> onSelectVariant;
+}
+
+/// Hand-mode selection binding for [PieceScoreHeaderBar].
+final class PieceScoreHandControl {
+  const PieceScoreHandControl({
+    required this.handMode,
+    required this.onSelectHandMode,
+  });
+
+  final HandMode handMode;
+  final ValueChanged<HandMode> onSelectHandMode;
+}
+
+/// Cursor stepping callbacks (`null` disables the corresponding button).
+final class PieceScoreStepControls {
+  const PieceScoreStepControls({
     this.onPrevSlice,
     this.onNextSlice,
     this.onResetSlice,
   });
 
-  final int measureNumber;
-  final int measureCount;
-  final bool canStepPrev;
-  final bool canStepNext;
   final VoidCallback? onPrevSlice;
   final VoidCallback? onNextSlice;
   final VoidCallback? onResetSlice;
 }
 
-/// Responsive controls strip for variants, hand dimming, and cursor stepping.
+/// Measure-loop status and modal triggers displayed in [PieceScoreHeaderBar].
+final class PieceScoreLoopControls {
+  const PieceScoreLoopControls({
+    this.loopLabel,
+    this.onOpenLoopSheet,
+    this.onClearLoop,
+  });
+
+  final String? loopLabel;
+  final VoidCallback? onOpenLoopSheet;
+  final VoidCallback? onClearLoop;
+}
+
+/// Cursor indicator and navigation bindings displayed in [PieceScoreHeaderBar].
+final class PieceScoreCursorBarData {
+  const PieceScoreCursorBarData({
+    required this.measureNumber,
+    required this.measureCount,
+    this.stepControls = const PieceScoreStepControls(),
+    this.loopControls = const PieceScoreLoopControls(),
+  });
+
+  final int measureNumber;
+  final int measureCount;
+  final PieceScoreStepControls stepControls;
+  final PieceScoreLoopControls loopControls;
+
+  bool get canStepPrev => stepControls.onPrevSlice != null;
+  bool get canStepNext => stepControls.onNextSlice != null;
+  bool get canReset => stepControls.onResetSlice != null;
+  VoidCallback? get onPrevSlice => stepControls.onPrevSlice;
+  VoidCallback? get onNextSlice => stepControls.onNextSlice;
+  VoidCallback? get onResetSlice => stepControls.onResetSlice;
+  String? get loopLabel => loopControls.loopLabel;
+  VoidCallback? get onOpenLoopSheet => loopControls.onOpenLoopSheet;
+  VoidCallback? get onClearLoop => loopControls.onClearLoop;
+}
+
+/// Responsive controls strip for variants, hand dimming, measure loops, and cursor stepping.
 class PieceScoreHeaderBar extends StatelessWidget {
   const PieceScoreHeaderBar({
     super.key,
     required this.piece,
-    required this.selectedVariant,
-    required this.onSelectVariant,
-    required this.handMode,
-    required this.onSelectHandMode,
+    required this.variantControl,
+    required this.handControl,
     this.cursor,
   });
 
   final Piece piece;
-  final ScoreVariant selectedVariant;
-  final ValueChanged<ScoreVariant> onSelectVariant;
-  final HandMode handMode;
-  final ValueChanged<HandMode> onSelectHandMode;
+  final PieceScoreVariantControl variantControl;
+  final PieceScoreHandControl handControl;
   final PieceScoreCursorBarData? cursor;
 
   @override
@@ -76,35 +124,43 @@ class PieceScoreHeaderBar extends StatelessWidget {
                     'Tier ${variant.difficultyTier.tier}: ${variant.label}',
                     overflow: TextOverflow.ellipsis,
                   ),
-                  selected: variant.id == selectedVariant.id,
-                  onSelected: (_) => onSelectVariant(variant),
+                  selected: variant.id == variantControl.selectedVariant.id,
+                  onSelected: (_) => variantControl.onSelectVariant(variant),
                 ),
             ],
           ),
           if (cursor != null) const SizedBox(height: 6),
         ],
-        if (cursor != null)
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: <Widget>[
-              for (final mode in HandMode.values)
-                ChoiceChip(
-                  key: ValueKey<String>('hand_mode_${mode.name}'),
-                  showCheckmark: false,
-                  avatar: Icon(_iconForHand(mode), size: 16),
-                  label: Text(mode.label),
-                  selected: handMode == mode,
-                  onSelected: (_) => onSelectHandMode(mode),
-                ),
-              _MeasureBadge(
-                measureNumber: cursor!.measureNumber,
-                measureCount: cursor!.measureCount,
-              ),
-              _CursorStepRow(cursor: cursor!),
-            ],
+        if (cursor != null) _buildPracticeControls(colorScheme, cursor!),
+      ],
+    );
+  }
+
+  Widget _buildPracticeControls(
+    ColorScheme colorScheme,
+    PieceScoreCursorBarData activeCursor,
+  ) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        for (final mode in HandMode.values)
+          ChoiceChip(
+            key: ValueKey<String>('hand_mode_${mode.name}'),
+            showCheckmark: false,
+            avatar: Icon(_iconForHand(mode), size: 16),
+            label: Text(mode.label),
+            selected: handControl.handMode == mode,
+            onSelected: (_) => handControl.onSelectHandMode(mode),
           ),
+        _MeasureBadge(
+          measureNumber: activeCursor.measureNumber,
+          measureCount: activeCursor.measureCount,
+        ),
+        _CursorStepRow(cursor: activeCursor),
+        if (activeCursor.onOpenLoopSheet != null)
+          _LoopChipRow(cursor: activeCursor, colorScheme: colorScheme),
       ],
     );
   }
@@ -114,6 +170,42 @@ class PieceScoreHeaderBar extends StatelessWidget {
     HandMode.right => Icons.front_hand_outlined,
     HandMode.left => Icons.back_hand_outlined,
   };
+}
+
+class _LoopChipRow extends StatelessWidget {
+  const _LoopChipRow({required this.cursor, required this.colorScheme});
+
+  final PieceScoreCursorBarData cursor;
+  final ColorScheme colorScheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final isLoopActive = cursor.loopLabel != null;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        ActionChip(
+          key: const ValueKey<String>('score_loop_button'),
+          avatar: Icon(
+            Icons.repeat,
+            size: 16,
+            color: isLoopActive ? colorScheme.onSecondaryContainer : null,
+          ),
+          label: Text(cursor.loopLabel ?? 'Loop'),
+          backgroundColor: isLoopActive ? colorScheme.secondaryContainer : null,
+          onPressed: cursor.onOpenLoopSheet,
+        ),
+        if (isLoopActive && cursor.onClearLoop != null)
+          IconButton(
+            key: const ValueKey<String>('score_clear_loop_button'),
+            tooltip: 'Clear loop',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: cursor.onClearLoop,
+          ),
+      ],
+    );
+  }
 }
 
 class _MeasureBadge extends StatelessWidget {
@@ -172,10 +264,10 @@ class _CursorStepRow extends StatelessWidget {
         ),
         IconButton(
           key: const ValueKey<String>('score_reset_slice'),
-          tooltip: 'Reset cursor',
+          tooltip: 'Restart',
           visualDensity: VisualDensity.compact,
           icon: const Icon(Icons.first_page),
-          onPressed: cursor.canStepPrev ? cursor.onResetSlice : null,
+          onPressed: cursor.canReset ? cursor.onResetSlice : null,
         ),
       ],
     );

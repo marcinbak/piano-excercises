@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:piano_exercises/app/app_navigation_shell.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
-import 'package:piano_exercises/features/drill/drill.dart';
 import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/features/progression/progression.dart';
 
@@ -127,7 +127,7 @@ class PianoExercisesApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
       ),
-      home: home ?? const DrillScreen(),
+      home: home ?? const AppNavigationShell(),
     );
   }
 }

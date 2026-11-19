@@ -1,16 +1,22 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
+import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/features/piece_practice/domain/hand_mode.dart';
+import 'package:piano_exercises/features/piece_practice/domain/score_practice_navigator.dart';
+import 'package:piano_exercises/features/piece_practice/state/piece_practice_controller.dart';
 import 'package:piano_exercises/features/piece_practice/state/piece_score_providers.dart';
+import 'package:piano_exercises/features/piece_practice/state/practice_session_state.dart';
+import 'package:piano_exercises/features/piece_practice/ui/measure_loop_sheet.dart';
+import 'package:piano_exercises/features/piece_practice/ui/piece_practice_body.dart';
 import 'package:piano_exercises/features/piece_practice/ui/piece_score_header_bar.dart';
-import 'package:piano_exercises/features/piece_practice/ui/piece_score_viewport.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 import 'package:smufl_notation/smufl_notation.dart';
 
-/// Displays an interactive SMuFL grand-staff viewport for a catalog [Piece].
+/// Interactive SMuFL grand-staff Wait-Mode practice screen for a catalog [Piece].
 class PieceScoreScreen extends ConsumerStatefulWidget {
   const PieceScoreScreen({
     super.key,
@@ -18,22 +24,12 @@ class PieceScoreScreen extends ConsumerStatefulWidget {
     this.initialVariant,
     this.initialScore,
     this.wrongNoteOverlays = const <WrongNoteOverlay>[],
-    this.wrongNoteOverlaysBuilder,
-    this.appBarActionsBuilder,
   });
 
   final Piece piece;
   final ScoreVariant? initialVariant;
   final Score? initialScore;
   final List<WrongNoteOverlay> wrongNoteOverlays;
-  final List<WrongNoteOverlay> Function(Score score, int activeSliceIndex)?
-  wrongNoteOverlaysBuilder;
-  final List<Widget> Function(
-    Score score,
-    int activeSliceIndex,
-    ValueChanged<int> selectSlice,
-  )?
-  appBarActionsBuilder;
 
   @override
   ConsumerState<PieceScoreScreen> createState() => _PieceScoreScreenState();
@@ -41,136 +37,141 @@ class PieceScoreScreen extends ConsumerStatefulWidget {
 
 class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   late ScoreVariant _selectedVariant;
-  HandMode _handMode = HandMode.both;
-  int _activeSliceIndex = 0;
+  int _modalPauseDepth = 0;
+  bool _wasExternallyPausedBeforeModal = false;
+  bool _isOpeningLoopSheet = false;
 
   @override
   void initState() {
     super.initState();
-    _selectedVariant = _resolveInitialVariant();
+    _selectedVariant = _resolveInitialVariant(widget.piece);
   }
 
   @override
   void didUpdateWidget(covariant PieceScoreScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.piece.id != widget.piece.id) {
-      _selectedVariant = _resolveInitialVariant();
-      _activeSliceIndex = 0;
+      _selectedVariant = _resolveInitialVariant(widget.piece);
     }
   }
 
-  ScoreVariant _resolveInitialVariant() {
+  ScoreVariant _resolveInitialVariant(Piece piece) {
     final candidate = widget.initialVariant;
-    if (candidate != null &&
-        widget.piece.variants.any((v) => v.id == candidate.id)) {
+    if (candidate != null && piece.variants.any((v) => v.id == candidate.id)) {
       return candidate;
     }
-    return widget.piece.variants.first;
+    return piece.variants.first;
+  }
+
+  ScoreVariant _resolveActiveVariant(Piece effectivePiece) {
+    for (final variant in effectivePiece.variants) {
+      if (variant.id == _selectedVariant.id) {
+        return variant;
+      }
+    }
+    return effectivePiece.variants.isNotEmpty
+        ? effectivePiece.variants.first
+        : _selectedVariant;
   }
 
   @override
   Widget build(BuildContext context) {
+    // Retain autoDispose paused state across AsyncLoading before controller mounts.
+    ref.listen<bool>(practicePausedProvider, (_, _) {});
+    final effectivePiece =
+        ref.watch(livePieceProvider(widget.piece.id)).value ?? widget.piece;
+    final activeVariant = _resolveActiveVariant(effectivePiece);
     final useInitialScore =
         widget.initialScore != null &&
-        _selectedVariant.id == _resolveInitialVariant().id;
+        activeVariant.id == _resolveInitialVariant(effectivePiece).id;
     final asyncScore = useInitialScore
         ? AsyncData<Score>(widget.initialScore!)
         : ref
-              .watch(variantScoreProvider(_selectedVariant))
+              .watch(variantScoreProvider(activeVariant))
               .whenData((parsed) => parsed.score);
-    final loadedScore = asyncScore.value;
-    final safeSliceIndex = loadedScore == null || loadedScore.slices.isEmpty
-        ? 0
-        : _activeSliceIndex.clamp(0, loadedScore.slices.length - 1);
     final isCompactHeight = MediaQuery.sizeOf(context).height < 480;
 
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: isCompactHeight ? 48 : null,
         title: Text(
-          widget.piece.title,
+          effectivePiece.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        actions: loadedScore != null && widget.appBarActionsBuilder != null
-            ? widget.appBarActionsBuilder!(
-                loadedScore,
-                safeSliceIndex,
-                (index) => _selectSlice(loadedScore, index),
-              )
-            : null,
+        actions: <Widget>[
+          MidiStatusActionButton(
+            onBeforeOpen: _pauseBeforeModal,
+            onAfterClose: _restoreAfterModal,
+          ),
+        ],
       ),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) => _buildScaffoldBody(
-            context,
-            asyncScore: asyncScore,
-            safeSliceIndex: safeSliceIndex,
-            isCompactHeight: isCompactHeight,
-            maxHeight: constraints.maxHeight,
+            PiecePracticeScreenData(
+              effectivePiece: effectivePiece,
+              activeVariant: activeVariant,
+              asyncScore: asyncScore,
+              isCompactHeight: isCompactHeight,
+              maxHeight: constraints.maxHeight,
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildScaffoldBody(
-    BuildContext context, {
-    required AsyncValue<Score> asyncScore,
-    required int safeSliceIndex,
-    required bool isCompactHeight,
-    required double maxHeight,
-  }) {
-    final loadedScore = asyncScore.value;
-    final hasVariants = widget.piece.variants.length > 1;
-    final showHeader = loadedScore != null || hasVariants;
-    final maxHeaderHeight = isCompactHeight
-        ? math.max(96.0, maxHeight * 0.42)
-        : math.max(120.0, maxHeight * 0.36);
+  Widget _buildScaffoldBody(PiecePracticeScreenData data) {
+    final loadedScore = data.asyncScore.value;
+    final showHeader =
+        loadedScore != null || data.effectivePiece.variants.length > 1;
+    final maxHeaderHeight = data.isCompactHeight
+        ? math.max(96.0, data.maxHeight * 0.42)
+        : math.max(120.0, data.maxHeight * 0.36);
+
+    final handMode = ref.watch(practiceHandModeProvider);
+    final sessionKey = loadedScore == null
+        ? null
+        : PracticeSessionKey(
+            variantId: data.activeVariant.id,
+            score: loadedScore,
+          );
+    final sessionState = sessionKey == null
+        ? null
+        : ref.watch(piecePracticeControllerProvider(sessionKey));
+    final controller = sessionKey == null
+        ? null
+        : ref.read(piecePracticeControllerProvider(sessionKey).notifier);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         if (showHeader) ...<Widget>[
-          ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxHeaderHeight),
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                12,
-                isCompactHeight ? 4 : 8,
-                12,
-                isCompactHeight ? 4 : 8,
-              ),
-              child: PieceScoreHeaderBar(
-                piece: widget.piece,
-                selectedVariant: _selectedVariant,
-                onSelectVariant: _selectVariant,
-                handMode: _handMode,
-                onSelectHandMode: (mode) => setState(() => _handMode = mode),
-                cursor: loadedScore == null
-                    ? null
-                    : _buildCursorData(loadedScore, safeSliceIndex),
-              ),
+          _buildHeaderStrip(
+            data: data,
+            handMode: handMode,
+            cursor: _buildCursorOrNull(
+              loadedScore,
+              handMode,
+              sessionState,
+              controller,
             ),
+            maxHeaderHeight: maxHeaderHeight,
           ),
           const Divider(height: 1),
         ],
         Expanded(
-          child: asyncScore.when(
-            loading: () => const Center(
-              child: CircularProgressIndicator(
-                key: ValueKey<String>('score_loading_indicator'),
-              ),
-            ),
-            error: (error, _) => _ScoreErrorView(
-              error: error,
+          child: PiecePracticeBody(
+            asyncScore: data.asyncScore,
+            handMode: handMode,
+            sessionState: sessionState,
+            config: PiecePracticeBodyConfig(
+              isCompactHeight: data.isCompactHeight,
               onRetry: () =>
-                  ref.invalidate(variantScoreProvider(_selectedVariant)),
-            ),
-            data: (score) => _buildLoadedViewport(
-              score: score,
-              safeSliceIndex: safeSliceIndex,
-              isCompactHeight: isCompactHeight,
+                  ref.invalidate(variantScoreProvider(data.activeVariant)),
+              controller: controller,
+              staticWrongOverlays: widget.wrongNoteOverlays,
             ),
           ),
         ),
@@ -178,93 +179,128 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     );
   }
 
-  PieceScoreCursorBarData _buildCursorData(Score score, int safeSliceIndex) {
-    final sliceCount = score.slices.length;
-    final currentMeasure = sliceCount == 0
-        ? 0
-        : score.slices[safeSliceIndex].measureNumber;
-    return PieceScoreCursorBarData(
-      measureNumber: currentMeasure,
-      measureCount: score.measures.length,
-      canStepPrev: sliceCount > 0 && safeSliceIndex > 0,
-      canStepNext: sliceCount > 0 && safeSliceIndex < sliceCount - 1,
-      onPrevSlice: () => _selectSlice(score, safeSliceIndex - 1),
-      onNextSlice: () => _selectSlice(score, safeSliceIndex + 1),
-      onResetSlice: () => _selectSlice(score, 0),
+  PieceScoreCursorBarData? _buildCursorOrNull(
+    Score? loadedScore,
+    HandMode handMode,
+    PracticeSessionState? sessionState,
+    PiecePracticeController? controller,
+  ) {
+    if (loadedScore == null || sessionState == null || controller == null) {
+      return null;
+    }
+    return buildPieceScoreCursorBarData(
+      score: loadedScore,
+      handMode: handMode,
+      sessionState: sessionState,
+      controller: controller,
+      onOpenLoopSheet: loadedScore.measures.isEmpty
+          ? null
+          : () => unawaited(
+              _openLoopSheet(loadedScore, sessionState, controller),
+            ),
     );
   }
 
-  Widget _buildLoadedViewport({
-    required Score score,
-    required int safeSliceIndex,
-    required bool isCompactHeight,
+  Widget _buildHeaderStrip({
+    required PiecePracticeScreenData data,
+    required HandMode handMode,
+    required PieceScoreCursorBarData? cursor,
+    required double maxHeaderHeight,
   }) {
-    final sliceCount = score.slices.length;
-    final resolvedWrongNotes = <WrongNoteOverlay>[
-      ...widget.wrongNoteOverlays,
-      if (widget.wrongNoteOverlaysBuilder != null && sliceCount > 0)
-        ...widget.wrongNoteOverlaysBuilder!(score, safeSliceIndex),
-    ];
-
-    return Padding(
-      padding: EdgeInsets.all(isCompactHeight ? 6 : 12),
-      child: PieceScoreViewport(
-        score: score,
-        activeSliceIndex: sliceCount == 0 ? null : safeSliceIndex,
-        handMode: _handMode,
-        wrongNoteOverlays: resolvedWrongNotes,
-        onSliceTapped: (index) => _selectSlice(score, index),
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeaderHeight),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          12,
+          data.isCompactHeight ? 4 : 8,
+          12,
+          data.isCompactHeight ? 4 : 8,
+        ),
+        child: PieceScoreHeaderBar(
+          piece: data.effectivePiece,
+          variantControl: PieceScoreVariantControl(
+            selectedVariant: data.activeVariant,
+            onSelectVariant: _selectVariant,
+          ),
+          handControl: PieceScoreHandControl(
+            handMode: handMode,
+            onSelectHandMode: (mode) =>
+                ref.read(practiceHandModeProvider.notifier).setMode(mode),
+          ),
+          cursor: cursor,
+        ),
       ),
     );
+  }
+
+  void _pauseBeforeModal() {
+    if (_modalPauseDepth == 0) {
+      _wasExternallyPausedBeforeModal = ref.read(practicePausedProvider);
+      ref.read(practicePausedProvider.notifier).setPaused(true);
+    }
+    _modalPauseDepth += 1;
+  }
+
+  void _restoreAfterModal() {
+    if (_modalPauseDepth > 0) {
+      _modalPauseDepth -= 1;
+    }
+    if (!mounted || _modalPauseDepth > 0 || _wasExternallyPausedBeforeModal) {
+      return;
+    }
+    ref.read(practicePausedProvider.notifier).setPaused(false);
+  }
+
+  Future<void> _openLoopSheet(
+    Score score,
+    PracticeSessionState sessionState,
+    PiecePracticeController controller,
+  ) async {
+    if (_isOpeningLoopSheet) {
+      return;
+    }
+    _isOpeningLoopSheet = true;
+    final initialMeasure = sessionState.activeSliceOrdinal == null
+        ? 0
+        : ScorePracticeNavigator.measureIndexOfSliceOrdinal(
+            score,
+            sessionState.activeSliceOrdinal!,
+          );
+    _pauseBeforeModal();
+    final MeasureLoopSheetResult? result;
+    try {
+      result = await MeasureLoopSheet.show(
+        context,
+        measures: score.measures,
+        initialMeasureIndex: initialMeasure,
+        currentLoop: sessionState.loopRange,
+      );
+    } finally {
+      _isOpeningLoopSheet = false;
+      _restoreAfterModal();
+    }
+    if (!mounted || result == null) {
+      return;
+    }
+    _applyLoopSheetResult(result, controller);
+  }
+
+  void _applyLoopSheetResult(
+    MeasureLoopSheetResult result,
+    PiecePracticeController controller,
+  ) {
+    switch (result) {
+      case MeasureLoopApply(:final range):
+        controller.setLoopRange(range);
+      case MeasureLoopClear():
+        controller.setLoopRange(null);
+    }
   }
 
   void _selectVariant(ScoreVariant variant) {
     if (variant.id == _selectedVariant.id) {
       return;
     }
-    setState(() {
-      _selectedVariant = variant;
-      _activeSliceIndex = 0;
-    });
-  }
-
-  void _selectSlice(Score score, int nextIndex) {
-    if (score.slices.isEmpty) {
-      return;
-    }
-    final clamped = nextIndex.clamp(0, score.slices.length - 1);
-    setState(() => _activeSliceIndex = clamped);
-  }
-}
-
-class _ScoreErrorView extends StatelessWidget {
-  const _ScoreErrorView({required this.error, required this.onRetry});
-
-  final Object error;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      key: const ValueKey<String>('score_error_view'),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const Icon(Icons.error_outline, size: 40),
-            const SizedBox(height: 12),
-            Text('Could not load score: $error', textAlign: TextAlign.center),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              key: const ValueKey<String>('score_retry_button'),
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
+    setState(() => _selectedVariant = variant);
   }
 }

@@ -1,4 +1,5 @@
 import 'package:piano_exercises/features/piece_practice/domain/hand_mode.dart';
+import 'package:piano_exercises/features/piece_practice/domain/score_practice_navigator.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 import 'package:smufl_notation/smufl_notation.dart';
 
@@ -61,19 +62,45 @@ abstract final class ScoreNotationMapper {
     return WrongNoteOverlay(sliceIndex: sliceIndex, notes: mapped);
   }
 
-  /// Resolves the active [KeySignature] at chronological [sliceIndex].
-  static KeySignature activeKeySignatureAtSlice(Score score, int sliceIndex) {
-    var activeKey = score.scale.keySignature;
-    for (final measure in score.measures) {
-      if (measure.keySignature != null) {
-        activeKey = measure.keySignature!;
-      }
-      if (measure.slices.any((slice) => slice.sliceIndex == sliceIndex)) {
-        return activeKey;
+  /// Maps wrong played [StaffNote]s into non-empty clef-grouped overlays.
+  static List<WrongNoteOverlay> mapWrongNoteOverlays({
+    required int sliceIndex,
+    required List<StaffNote> wrongNotes,
+    required KeySignature activeKeySignature,
+  }) {
+    if (wrongNotes.isEmpty) {
+      return const <WrongNoteOverlay>[];
+    }
+    final trebleNotes = <StaffNote>[];
+    final bassNotes = <StaffNote>[];
+    for (final note in wrongNotes) {
+      if (note.clef == Clef.treble) {
+        trebleNotes.add(note);
+      } else {
+        bassNotes.add(note);
       }
     }
-    return activeKey;
+    return List<WrongNoteOverlay>.unmodifiable(<WrongNoteOverlay>[
+      if (trebleNotes.isNotEmpty)
+        mapWrongNotes(
+          sliceIndex: sliceIndex,
+          clef: SmuflClef.treble,
+          wrongNotes: trebleNotes,
+          activeKeySignature: activeKeySignature,
+        ),
+      if (bassNotes.isNotEmpty)
+        mapWrongNotes(
+          sliceIndex: sliceIndex,
+          clef: SmuflClef.bass,
+          wrongNotes: bassNotes,
+          activeKeySignature: activeKeySignature,
+        ),
+    ]);
   }
+
+  /// Resolves the active [KeySignature] at chronological [sliceIndex].
+  static KeySignature activeKeySignatureAtSlice(Score score, int sliceIndex) =>
+      ScorePracticeNavigator.activeKeySignatureAtSlice(score, sliceIndex);
 
   static NotationNote _mapWrongNote({
     required StaffNote staffNote,
