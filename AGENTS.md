@@ -49,7 +49,7 @@ One line per pitfall, grouped by area; full write-ups live in `docs/pitfalls/<ar
 - **iOS:** Physical device deployment requires Xcode signing beyond `--no-codesign` and `--profile`/`--release` AOT builds for untethered launches — see [docs/pitfalls/ios.md](docs/pitfalls/ios.md).
 - **Riverpod:** Subscribe directly to `MidiRepository.noteEventsStream` in `Notifier.build()`, defer `state` updates in `dispose()`, and pass `retry: (_, _) => null` on deterministic local `FutureProvider`s — see [docs/pitfalls/riverpod.md](docs/pitfalls/riverpod.md).
 - **Score Parser:** Bound `archive` ZIP decoding via raw EOCDR/local-header checks and `BoundedZipOutputStream`, override `XmlEntityMapping.decode` in `O(n)`, default omitted `<alter>` to `0`, and guard `activeAlterations` on `!tie.requiresAttack` — see [docs/pitfalls/score-parser.md](docs/pitfalls/score-parser.md).
-- **UI & SMuFL:** Align `Bravura` `TextPainter` glyphs via alphabetic baseline, call `dispose()`, set `ChoiceChip.showCheckmark: false`, use `widgets.dart` (`WidgetsApp`) in standalone packages, and clamp `visibleRect.top` on score shrink — see [docs/pitfalls/ui.md](docs/pitfalls/ui.md).
+- **UI & SMuFL:** Align `Bravura` `TextPainter` glyphs via alphabetic baseline, call `dispose()`, set `ChoiceChip.showCheckmark: false`, use `widgets.dart` (`WidgetsApp`) in standalone packages, clamp `visibleRect.top` on shrink, and pass `visibleRect: null` under unbounded height — see [docs/pitfalls/ui.md](docs/pitfalls/ui.md).
 
 ## Continuous documentation
 

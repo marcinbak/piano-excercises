@@ -23,3 +23,9 @@
 - **Symptom:** Culled systems stay blank after replacing a tall score with a shorter score while scrolled down.
 - **Root cause:** `ScrollPosition.correctPixels` clamps scroll offset during layout without notifying `ScrollController` listeners.
 - **Fix:** Resynchronize and clamp `visibleRect.top` against `maxScrollExtent` on `score`, `style`, and `controller` updates ([grand_staff_score_view.dart](../../packages/smufl_notation/lib/src/widgets/grand_staff_score_view.dart)).
+
+## Unbounded outer scroll containers cull CustomPainter past fallback height
+
+- **Symptom:** Systems below `480px` disappear when wrapping `GrandStaffScoreView` inside an unbounded vertical scroll container.
+- **Root cause:** `constraints.maxHeight` is infinite inside unbounded scroll views, so fixed fallback viewport heights or zero-height rects cull lower systems.
+- **Fix:** Pass `visibleRect: constraints.maxHeight.isFinite ? effectiveRect : null` to disable culling when height is unbounded ([grand_staff_score_view.dart](../../packages/smufl_notation/lib/src/widgets/grand_staff_score_view.dart)).
