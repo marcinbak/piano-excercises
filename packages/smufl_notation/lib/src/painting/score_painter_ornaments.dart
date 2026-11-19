@@ -2,9 +2,11 @@ import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 
-import 'package:smufl_notation/src/notation_model.dart';
-import 'package:smufl_notation/src/score_layout_types.dart';
-import 'package:smufl_notation/src/smufl_glyphs.dart';
+import 'package:smufl_notation/src/glyphs/smufl_glyphs.dart';
+import 'package:smufl_notation/src/layout/score_layout_geometry.dart';
+import 'package:smufl_notation/src/layout/score_layout_types.dart';
+import 'package:smufl_notation/src/model/notation_model.dart';
+import 'package:smufl_notation/src/painting/smufl_glyph_painter.dart';
 
 /// Canvas helpers for braces, time signatures, beams, and tie arcs.
 abstract final class ScorePainterOrnaments {

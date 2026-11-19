@@ -23,6 +23,7 @@ Rules for where code goes and what may depend on what. Enforced by `flutter anal
 - Feature → feature imports use only the target feature's barrel file (`lib/features/<name>/<name>.dart`); no cycles.
 - Cross-feature barrels exporting `state/`, `ui/`, or `data/` break `domain/` purity; pass `shared/` primitives into `domain/` instead.
 - Invert dependencies (an abstract interface in `domain/`, implemented in `data/`) only at real I/O boundaries (BLE-MIDI plugin, local storage, clock/randomness).
+- Inside `packages/smufl_notation/lib/src/`: `widgets/ -> painting/ -> layout/ -> model/ <- glyphs/` (`glyphs/` and `model/` are pure Dart; `layout/` avoids `package:flutter`).
 
 ## Placement
 

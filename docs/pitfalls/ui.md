@@ -22,4 +22,4 @@
 
 - **Symptom:** Culled systems stay blank after replacing a tall score with a shorter score while scrolled down.
 - **Root cause:** `ScrollPosition.correctPixels` clamps scroll offset during layout without notifying `ScrollController` listeners.
-- **Fix:** Resynchronize and clamp `visibleRect.top` against `maxScrollExtent` on `score`, `style`, and `controller` updates ([grand_staff_score_view.dart](../../packages/smufl_notation/lib/src/grand_staff_score_view.dart)).
+- **Fix:** Resynchronize and clamp `visibleRect.top` against `maxScrollExtent` on `score`, `style`, and `controller` updates ([grand_staff_score_view.dart](../../packages/smufl_notation/lib/src/widgets/grand_staff_score_view.dart)).

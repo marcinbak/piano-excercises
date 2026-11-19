@@ -2,8 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/painting.dart';
 
-import 'package:smufl_notation/src/score_layout_types.dart';
-import 'package:smufl_notation/src/smufl_glyphs.dart';
+import 'package:smufl_notation/src/glyphs/smufl_glyphs.dart';
+import 'package:smufl_notation/src/layout/score_layout_geometry.dart';
+import 'package:smufl_notation/src/layout/score_layout_types.dart';
+import 'package:smufl_notation/src/painting/smufl_glyph_painter.dart';
 
 /// Paints chords, ledger lines, stems, flags, rests, dots, and barlines.
 abstract final class ScorePainterChordRenderer {

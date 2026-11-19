@@ -1,5 +1,3 @@
-import 'package:flutter/painting.dart';
-
 /// SMuFL (`Bravura`) glyph codepoints and engraving metrics in staff spaces.
 abstract final class SmuflGlyphs {
   static const String gClef = '\uE050';
@@ -60,30 +58,5 @@ abstract final class SmuflGlyphs {
   static String timeSigDigit(int digit) {
     RangeError.checkValueInInterval(digit, 0, 9, 'digit');
     return timeSigDigits[digit];
-  }
-}
-
-/// Paints a SMuFL glyph with its alphabetic baseline aligned to [anchor.dy].
-void paintSmuflGlyph({
-  required Canvas canvas,
-  required String glyph,
-  required Offset anchor,
-  required TextStyle style,
-  bool centerHorizontally = true,
-}) {
-  final painter = TextPainter(
-    text: TextSpan(text: glyph, style: style),
-    textDirection: TextDirection.ltr,
-  );
-  // SMuFL aligns glyphs via alphabetic baseline; always dispose TextPainter.
-  try {
-    painter.layout();
-    final baseline = painter.computeDistanceToActualBaseline(
-      TextBaseline.alphabetic,
-    );
-    final dx = centerHorizontally ? anchor.dx - (painter.width / 2) : anchor.dx;
-    painter.paint(canvas, Offset(dx, anchor.dy - baseline));
-  } finally {
-    painter.dispose();
   }
 }

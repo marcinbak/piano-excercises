@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smufl_notation/smufl_notation.dart';
+import 'package:smufl_notation/src/layout/chord_collision_solver.dart';
 
 NotationNote _note(
   int step, {

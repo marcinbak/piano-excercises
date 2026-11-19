@@ -1,11 +1,13 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:smufl_notation/src/notation_model.dart';
-import 'package:smufl_notation/src/score_layout_types.dart';
-import 'package:smufl_notation/src/score_measure_placer.dart';
-import 'package:smufl_notation/src/score_measure_preparer.dart';
-import 'package:smufl_notation/src/score_tie_solver.dart';
+import 'package:smufl_notation/src/layout/score_layout_geometry.dart';
+import 'package:smufl_notation/src/layout/score_layout_types.dart';
+import 'package:smufl_notation/src/layout/score_measure_placer.dart';
+import 'package:smufl_notation/src/layout/score_measure_preparer.dart';
+import 'package:smufl_notation/src/layout/score_tie_solver.dart';
+import 'package:smufl_notation/src/model/notation_model.dart';
+import 'package:smufl_notation/src/model/notation_score_model.dart';
 
 /// Pure-Dart multi-system grand-staff engraving and layout engine.
 abstract final class ScoreLayoutEngine {
