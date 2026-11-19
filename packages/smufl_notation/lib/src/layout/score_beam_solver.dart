@@ -108,6 +108,14 @@ abstract final class ScoreBeamSolver {
         (dx > 0 ? (lastChord.stemEndY! - firstChord.stemEndY!) / dx : 0.0)
             .clamp(-_maxBeamSlope, _maxBeamSlope);
     final baseY = firstChord.stemEndY!;
+    var maxBeamCount = 1;
+    for (final idx in members) {
+      final count = _chordForClef(sourceSlices[idx], clef)!.duration.beamCount;
+      if (count > maxBeamCount) {
+        maxBeamCount = count;
+      }
+    }
+    final extraBeamSpaces = maxBeamCount > 2 ? (maxBeamCount - 2) * 0.85 : 0.0;
     final shiftY = _computeClearanceShift(
       placedSlices: placedSlices,
       members: members,
@@ -117,7 +125,7 @@ abstract final class ScoreBeamSolver {
         firstX: firstX,
         baseY: baseY,
         slope: slope,
-        minStemPx: 2.6 * staffSpace,
+        minStemPx: (2.6 + extraBeamSpaces) * staffSpace,
       ),
     );
 

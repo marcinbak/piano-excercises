@@ -30,6 +30,7 @@ final class PreparedMeasure {
   const PreparedMeasure({
     required this.index,
     required this.measure,
+    required this.previousKeyFifths,
     required this.activeKeyFifths,
     required this.keyChanged,
     required this.activeBeats,
@@ -41,6 +42,7 @@ final class PreparedMeasure {
 
   final int index;
   final NotationMeasure measure;
+  final int previousKeyFifths;
   final int activeKeyFifths;
   final bool keyChanged;
   final int activeBeats;
@@ -51,8 +53,14 @@ final class PreparedMeasure {
 
   double headerWidth({required bool isSystemStart, required double sp}) {
     var width = isSystemStart ? 3.5 * sp : 0.6 * sp;
-    if ((isSystemStart || keyChanged) && activeKeyFifths != 0) {
-      width += ((activeKeyFifths.abs() * 1.02) + 0.55) * sp;
+    final keyCount = ScoreMeasurePreparer.keySignatureEntries(
+      isSystemStart: isSystemStart,
+      keyChanged: keyChanged,
+      previousKeyFifths: previousKeyFifths,
+      activeKeyFifths: activeKeyFifths,
+    ).length;
+    if (keyCount > 0) {
+      width += ((keyCount * 1.02) + 0.55) * sp;
     }
     if (showTimeSignature) {
       width += 2.35 * sp;
@@ -95,6 +103,57 @@ abstract final class ScoreMeasurePreparer {
     );
   }
 
+  /// Returns key-signature columns (including naturals on key modulation).
+  static List<({SmuflAccidental accidental, int trebleStep, int bassStep})>
+  keySignatureEntries({
+    required bool isSystemStart,
+    required bool keyChanged,
+    required int previousKeyFifths,
+    required int activeKeyFifths,
+  }) {
+    if (!isSystemStart && !keyChanged) {
+      return const [];
+    }
+    if (keyChanged && activeKeyFifths == 0) {
+      return _accidentalEntries(previousKeyFifths, SmuflAccidental.natural);
+    }
+    if (keyChanged &&
+        previousKeyFifths != 0 &&
+        (previousKeyFifths > 0) != (activeKeyFifths > 0)) {
+      return [
+        ..._accidentalEntries(previousKeyFifths, SmuflAccidental.natural),
+        ..._accidentalEntries(
+          activeKeyFifths,
+          activeKeyFifths > 0 ? SmuflAccidental.sharp : SmuflAccidental.flat,
+        ),
+      ];
+    }
+    final activeAcc = activeKeyFifths > 0
+        ? SmuflAccidental.sharp
+        : SmuflAccidental.flat;
+    final entries = _accidentalEntries(activeKeyFifths, activeAcc);
+    if (keyChanged &&
+        previousKeyFifths != 0 &&
+        previousKeyFifths.abs() > activeKeyFifths.abs()) {
+      final cancel = _accidentalEntries(
+        previousKeyFifths,
+        SmuflAccidental.natural,
+      );
+      return [...entries, ...cancel.sublist(activeKeyFifths.abs())];
+    }
+    return entries;
+  }
+
+  static List<({SmuflAccidental accidental, int trebleStep, int bassStep})>
+  _accidentalEntries(int fifths, SmuflAccidental accidental) {
+    final tSteps = keySignatureSteps(SmuflClef.treble, fifths);
+    final bSteps = keySignatureSteps(SmuflClef.bass, fifths);
+    return [
+      for (var i = 0; i < tSteps.length; i += 1)
+        (accidental: accidental, trebleStep: tSteps[i], bassStep: bSteps[i]),
+    ];
+  }
+
   static List<PreparedMeasure> prepareMeasures(
     List<NotationMeasure> measures,
     double sp,
@@ -106,6 +165,7 @@ abstract final class ScoreMeasurePreparer {
 
     for (var i = 0; i < measures.length; i += 1) {
       final m = measures[i];
+      final previousKey = i == 0 ? 0 : activeKey;
       final keyChanged =
           (i == 0 && (m.keyFifths ?? 0) != 0) ||
           (i > 0 && m.keyFifths != null && m.keyFifths != activeKey);
@@ -126,6 +186,7 @@ abstract final class ScoreMeasurePreparer {
           index: i,
           measure: m,
           header: (
+            previousKey: previousKey,
             activeKey: activeKey,
             keyChanged: keyChanged,
             activeBeats: activeBeats,
@@ -143,6 +204,7 @@ abstract final class ScoreMeasurePreparer {
     required int index,
     required NotationMeasure measure,
     required ({
+      int previousKey,
       int activeKey,
       bool keyChanged,
       int activeBeats,
@@ -183,6 +245,7 @@ abstract final class ScoreMeasurePreparer {
     return PreparedMeasure(
       index: index,
       measure: measure,
+      previousKeyFifths: header.previousKey,
       activeKeyFifths: header.activeKey,
       keyChanged: header.keyChanged,
       activeBeats: header.activeBeats,

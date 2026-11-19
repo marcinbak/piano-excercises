@@ -17,6 +17,7 @@ class GrandStaffScoreView extends StatefulWidget {
     this.style = const ScoreStyle(),
     this.activeSliceIndex,
     this.dimmedClef,
+    this.activeHand = NotationHandFilter.both,
     this.wrongNoteOverlays = const <WrongNoteOverlay>[],
     this.onSliceTapped,
     this.controller,
@@ -26,6 +27,7 @@ class GrandStaffScoreView extends StatefulWidget {
   final ScoreStyle style;
   final int? activeSliceIndex;
   final SmuflClef? dimmedClef;
+  final NotationHandFilter activeHand;
   final List<WrongNoteOverlay> wrongNoteOverlays;
   final ValueChanged<int>? onSliceTapped;
   final ScrollController? controller;
@@ -54,6 +56,7 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
       _ownedController = ScrollController();
     }
     _controller.addListener(_syncVisibleRect);
+    _scheduleScrollToActiveSlice();
   }
 
   @override
@@ -74,15 +77,21 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
         oldWidget.style != widget.style) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _syncVisibleRect());
     }
-    if (widget.activeSliceIndex != oldWidget.activeSliceIndex &&
-        widget.activeSliceIndex != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final target = widget.activeSliceIndex;
-        if (target != null) {
-          _scrollToActiveSlice(target);
-        }
-      });
+    if (widget.activeSliceIndex != oldWidget.activeSliceIndex) {
+      _scheduleScrollToActiveSlice();
     }
+  }
+
+  void _scheduleScrollToActiveSlice() {
+    if (widget.activeSliceIndex == null) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = widget.activeSliceIndex;
+      if (mounted && target != null) {
+        _scrollToActiveSlice(target);
+      }
+    });
   }
 
   @override
@@ -167,12 +176,12 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final hasFiniteHeight = constraints.maxHeight.isFinite;
         final width = constraints.maxWidth.isFinite
             ? math.max(1.0, constraints.maxWidth)
             : 360.0;
-        final height = constraints.maxHeight.isFinite
-            ? constraints.maxHeight
-            : 480.0;
+        final height = hasFiniteHeight ? constraints.maxHeight : 0.0;
+        final widthChanged = _lastWidth != null && _lastWidth != width;
         if (width != _viewportWidth || height != _viewportHeight) {
           _viewportWidth = width;
           _viewportHeight = height;
@@ -182,8 +191,12 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
         }
 
         final layout = _layoutForWidth(width);
-        final initialRect =
-            _visibleRect.value ?? Rect.fromLTWH(0, 0, width, height);
+        if (widthChanged) {
+          _scheduleScrollToActiveSlice();
+        }
+        final initialRect = hasFiniteHeight
+            ? (_visibleRect.value ?? Rect.fromLTWH(0, 0, width, height))
+            : null;
 
         return SingleChildScrollView(
           controller: _controller,
@@ -202,14 +215,20 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
             child: ValueListenableBuilder<Rect?>(
               valueListenable: _visibleRect,
               builder: (context, rect, _) {
-                final rawRect = rect ?? initialRect;
-                final maxTop = math.max(0.0, layout.totalSize.height - height);
-                final effectiveRect = Rect.fromLTWH(
-                  0,
-                  rawRect.top.clamp(0.0, maxTop),
-                  width,
-                  height,
-                );
+                Rect? effectiveRect;
+                if (hasFiniteHeight) {
+                  final rawRect = rect ?? initialRect!;
+                  final maxTop = math.max(
+                    0.0,
+                    layout.totalSize.height - height,
+                  );
+                  effectiveRect = Rect.fromLTWH(
+                    0,
+                    rawRect.top.clamp(0.0, maxTop),
+                    width,
+                    height,
+                  );
+                }
                 return RepaintBoundary(
                   child: CustomPaint(
                     size: layout.totalSize,
@@ -217,6 +236,7 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
                       layout: layout,
                       activeSliceIndex: widget.activeSliceIndex,
                       dimmedClef: widget.dimmedClef,
+                      activeHand: widget.activeHand,
                       wrongNoteOverlays: widget.wrongNoteOverlays,
                       visibleRect: effectiveRect,
                     ),

@@ -71,6 +71,7 @@ abstract final class ChordCollisionSolver {
   }) => solveNotes(
     chord.notes,
     hasStem: chord.duration.hasStem,
+    beamCount: chord.duration.beamCount,
     overrideStemUp: overrideStemUp,
   );
 
@@ -78,6 +79,7 @@ abstract final class ChordCollisionSolver {
   static SolvedChordLayout solveNotes(
     List<NotationNote> notes, {
     required bool hasStem,
+    int beamCount = 0,
     bool? overrideStemUp,
   }) {
     if (notes.isEmpty) {
@@ -97,15 +99,22 @@ abstract final class ChordCollisionSolver {
     final stemUp = overrideStemUp ?? computeStemUp(sorted);
     final shifts = _solveSecondShifts(sorted, hasStem: hasStem, stemUp: stemUp);
     final columns = _solveAccidentalColumns(sorted);
-    return _assembleLayout(sorted, shifts, columns, stemUp);
+    return _assembleLayout(
+      sorted,
+      shifts,
+      columns,
+      stemUp,
+      beamCount: beamCount,
+    );
   }
 
   static SolvedChordLayout _assembleLayout(
     List<NotationNote> sorted,
     List<double> shifts,
     List<int?> columns,
-    bool stemUp,
-  ) {
+    bool stemUp, {
+    required int beamCount,
+  }) {
     var maxCol = -1;
     var hasRightShift = false;
     var hasLeftShift = false;
@@ -132,7 +141,9 @@ abstract final class ChordCollisionSolver {
 
     final minStep = sorted.first.staffStep;
     final maxStep = sorted.last.staffStep;
-    const stemLengthSteps = SmuflGlyphs.defaultStemLengthSpaces * 2.0;
+    final extraBeamSpaces = beamCount > 2 ? (beamCount - 2) * 0.85 : 0.0;
+    final stemLengthSteps =
+        (SmuflGlyphs.defaultStemLengthSpaces + extraBeamSpaces) * 2.0;
     return SolvedChordLayout(
       placements: List<SolvedNotePlacement>.unmodifiable(placements),
       stemUp: stemUp,

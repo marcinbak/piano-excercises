@@ -31,18 +31,30 @@ final class ScoreStyle {
   double get fontSize => staffSpace * 4.0;
 
   /// Returns a copy with overridden visual properties.
-  ScoreStyle copyWith({double? staffSpace}) {
+  ScoreStyle copyWith({
+    double? staffSpace,
+    double? systemGap,
+    double? trebleToBassGapSpaces,
+    Color? inkColor,
+    Color? staffLineColor,
+    Color? cursorColor,
+    Color? errorColor,
+    double? dimmedOpacity,
+    String? fontFamily,
+    String? fontPackage,
+  }) {
     return ScoreStyle(
       staffSpace: staffSpace ?? this.staffSpace,
-      systemGap: systemGap,
-      trebleToBassGapSpaces: trebleToBassGapSpaces,
-      inkColor: inkColor,
-      staffLineColor: staffLineColor,
-      cursorColor: cursorColor,
-      errorColor: errorColor,
-      dimmedOpacity: dimmedOpacity,
-      fontFamily: fontFamily,
-      fontPackage: fontPackage,
+      systemGap: systemGap ?? this.systemGap,
+      trebleToBassGapSpaces:
+          trebleToBassGapSpaces ?? this.trebleToBassGapSpaces,
+      inkColor: inkColor ?? this.inkColor,
+      staffLineColor: staffLineColor ?? this.staffLineColor,
+      cursorColor: cursorColor ?? this.cursorColor,
+      errorColor: errorColor ?? this.errorColor,
+      dimmedOpacity: dimmedOpacity ?? this.dimmedOpacity,
+      fontFamily: fontFamily ?? this.fontFamily,
+      fontPackage: fontPackage ?? this.fontPackage,
     );
   }
 

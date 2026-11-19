@@ -148,42 +148,56 @@ abstract final class ScorePainterOrnaments {
     Paint paint,
   ) {
     final cFirst = group.chords.first;
-    final dx = group.chords.last.stemX - cFirst.stemX;
     final thick = SmuflGlyphs.beamThicknessSpaces * staffSpace;
     final dir = group.stemUp ? 1.0 : -1.0;
-    final shift =
+    final stepOffset =
         dir *
         (SmuflGlyphs.beamThicknessSpaces + SmuflGlyphs.beamSpacingSpaces) *
         staffSpace;
     final stemHalf =
         math.max(1.0, SmuflGlyphs.stemThicknessSpaces * staffSpace) * 0.5;
+    final maxBeamCount = group.chords.fold<int>(
+      1,
+      (best, chord) => math.max(best, chord.beamCount),
+    );
     double yAt(double x) => cFirst.stemTipY + (slope * (x - cFirst.stemX));
 
-    var i = 0;
-    while (i < group.chords.length) {
-      if (group.chords[i].beamCount < 2) {
-        i += 1;
-        continue;
+    for (var level = 2; level <= maxBeamCount; level += 1) {
+      final shift = stepOffset * (level - 1);
+      var i = 0;
+      while (i < group.chords.length) {
+        if (group.chords[i].beamCount < level) {
+          i += 1;
+          continue;
+        }
+        var end = i + 1;
+        while (end < group.chords.length &&
+            group.chords[end].beamCount >= level) {
+          end += 1;
+        }
+        final localDx = i == 0
+            ? group.chords[1].stemX - group.chords[0].stemX
+            : group.chords[i].stemX - group.chords[i - 1].stemX;
+        final stubLen = math.min(staffSpace * 0.95, localDx * 0.45);
+        final sx0 = end - i >= 2
+            ? group.chords[i].stemX - stemHalf
+            : (i == 0
+                  ? group.chords[i].stemX
+                  : group.chords[i].stemX - stubLen);
+        final sx1 = end - i >= 2
+            ? group.chords[end - 1].stemX + stemHalf
+            : (i == 0
+                  ? group.chords[i].stemX + stubLen
+                  : group.chords[i].stemX);
+        _drawQuad(
+          canvas,
+          (sx0, yAt(sx0) + shift),
+          (sx1, yAt(sx1) + shift),
+          dir * thick,
+          paint,
+        );
+        i = end;
       }
-      var end = i + 1;
-      while (end < group.chords.length && group.chords[end].beamCount >= 2) {
-        end += 1;
-      }
-      final stubLen = math.min(staffSpace * 0.95, dx * 0.45);
-      final sx0 = end - i >= 2
-          ? group.chords[i].stemX - stemHalf
-          : (i == 0 ? group.chords[i].stemX : group.chords[i].stemX - stubLen);
-      final sx1 = end - i >= 2
-          ? group.chords[end - 1].stemX + stemHalf
-          : (i == 0 ? group.chords[i].stemX + stubLen : group.chords[i].stemX);
-      _drawQuad(
-        canvas,
-        (sx0, yAt(sx0) + shift),
-        (sx1, yAt(sx1) + shift),
-        dir * thick,
-        paint,
-      );
-      i = end;
     }
   }
 
