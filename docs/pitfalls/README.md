@@ -5,6 +5,7 @@ Record non-obvious bugs, platform/BLE-MIDI quirks, and workflow workarounds here
 ## Areas
 
 - [BLE-MIDI](ble-midi.md) — Bluetooth power-off scan state and initialization wait timeout.
+- [Catalog & SQLite](catalog.md) — Stock Android FTS4 fallback, per-connection `foreign_keys`, and `.mxl` picker filtering.
 - [iOS](ios.md) — Physical device code signing and untethered AOT build requirements.
 - [Riverpod](riverpod.md) — `StreamProvider` coalescing of rapid MIDI events and `dispose()` state mutation.
 - [Score Parser](score-parser.md) — `archive` `3.6.x` ZIP bounds/headers, `xml` `7.x` `O(n^2)` entity decode, omitted `<alter>`, and tie accidentals.
