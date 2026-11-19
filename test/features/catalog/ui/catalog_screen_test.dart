@@ -580,18 +580,6 @@ void main() {
         findsOneWidget,
       );
 
-      // Toggle 'One tier for all' -> select Elementary (tier 2) and submit.
-      await tester.tap(
-        find.byKey(const ValueKey<String>('batch-tier-mode-override')),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey<String>('batch-tier-chip-2')));
-      await tester.pumpAndSettle();
-      expect(
-        find.textContaining('Tier 2: Elementary (mikrokosmos_vol1.mxl)'),
-        findsOneWidget,
-      );
-
       final submitBtn = find.byKey(
         const ValueKey<String>('batch-import-submit-button'),
       );
@@ -603,7 +591,8 @@ void main() {
       expect(find.byType(BatchScoreImportSheet), findsNothing);
       expect(find.text('Mikrokosmos No. 1'), findsOneWidget);
       expect(find.text('Etude Op. 10'), findsOneWidget);
-      expect(find.text('Tier 2: Elementary'), findsNWidgets(2));
+      expect(find.text('Tier 1: Beginner'), findsOneWidget);
+      expect(find.text('Tier 4: Advanced'), findsOneWidget);
 
       // 2. Idempotent re-import of the same bundle shows 0 new, 2 duplicates skipped, and Close button.
       importSource.enqueueSelection(() async => batchSelection);
@@ -626,7 +615,64 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(BatchScoreImportSheet), findsNothing);
 
-      // 3. Single-candidate bundle routed to ScoreImportSheet when launched from card '+' attach button.
+      // 3. Toggle 'One tier for all' -> select Elementary (tier 2) and submit.
+      final overrideSelection = ScoreImportSelection(
+        candidates: <ImportedScoreCandidate>[
+          _syntheticCandidate(
+            fileName: 'sonata.mxl',
+            archiveEntryPath: 'tier1/sonata.mxl',
+            title: 'Sonata in C',
+            artist: 'Mozart',
+            bytes: const <int>[10, 11],
+          ),
+          _syntheticCandidate(
+            fileName: 'prelude.mxl',
+            archiveEntryPath: 'tier3/prelude.mxl',
+            title: 'Prelude in D',
+            artist: 'Bach',
+            bytes: const <int>[12, 13],
+          ),
+        ],
+        isBundle: true,
+      );
+      importSource.enqueueSelection(() async => overrideSelection);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('catalog-import-button')),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('batch-tier-mode-override')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('batch-tier-chip-2')));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Tier 2: Elementary (sonata.mxl)'),
+        findsOneWidget,
+      );
+
+      final overrideSubmitBtn = find.byKey(
+        const ValueKey<String>('batch-import-submit-button'),
+      );
+      await tester.ensureVisible(overrideSubmitBtn);
+      await tester.tap(overrideSubmitBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(BatchScoreImportSheet), findsNothing);
+      await tester.scrollUntilVisible(
+        find.text('Sonata in C'),
+        200,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey<String>('catalog-piece-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(find.text('Sonata in C'), findsOneWidget);
+      expect(find.text('Prelude in D'), findsOneWidget);
+      expect(find.text('Tier 2: Elementary'), findsNWidgets(2));
+
+      // 4. Single-candidate bundle routed to ScoreImportSheet when launched from card '+' attach button.
       final attachCandidate = _syntheticCandidate(
         fileName: 'attach_hard.mxl',
         archiveEntryPath: 'hard/attach_hard.mxl',
@@ -640,9 +686,20 @@ void main() {
           isBundle: true,
         ),
       );
-      await tester.tap(
-        find.byKey(const ValueKey<String>('piece-attach-variant-button-id_1')),
+      final attachButton = find.byKey(
+        const ValueKey<String>('piece-attach-variant-button-id_1'),
       );
+      await tester.scrollUntilVisible(
+        attachButton,
+        -200,
+        scrollable: find.descendant(
+          of: find.byKey(const ValueKey<String>('catalog-piece-list')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.ensureVisible(attachButton);
+      await tester.pumpAndSettle();
+      await tester.tap(attachButton);
       await tester.pumpAndSettle();
       expect(find.byType(ScoreImportSheet), findsOneWidget);
       expect(find.byType(BatchScoreImportSheet), findsNothing);

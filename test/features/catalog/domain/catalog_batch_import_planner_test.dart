@@ -345,5 +345,113 @@ void main() {
         DifficultyTier.advanced,
       );
     });
+
+    test('attaches distinct-tier subfolder arrangements alongside bare-filename existing variant and re-imports idempotently', () {
+      final cMajor = Scale.fromKeySignature(KeySignature.cMajor);
+      final existing = Piece(
+        id: 'p_sonata',
+        title: 'Sonata K.545',
+        artist: 'Mozart',
+        scale: cMajor,
+        variants: <ScoreVariant>[
+          ScoreVariant(
+            id: 'v_beg',
+            pieceId: 'p_sonata',
+            difficultyTier: DifficultyTier.beginner,
+            label: 'Beginner',
+            fileName: 'sonata.mxl',
+            storedRelativePath: 'scores/v_beg.mxl',
+            importedAtMs: 10,
+          ),
+        ],
+      );
+
+      final zipCandidates = <ImportedScoreCandidate>[
+        _candidate(
+          fileName: 'sonata.mxl',
+          archiveEntryPath: 'beginner/sonata.mxl',
+          title: 'Sonata K.545',
+          artist: 'Mozart',
+          bytes: const <int>[1, 2, 3],
+        ),
+        _candidate(
+          fileName: 'sonata.mxl',
+          archiveEntryPath: 'advanced/sonata.mxl',
+          title: 'Sonata K.545',
+          artist: 'Mozart',
+          bytes: const <int>[4, 5, 6],
+        ),
+      ];
+
+      final firstPlan = CatalogBatchImportPlanner.plan(
+        existingPieces: <Piece>[existing],
+        candidates: zipCandidates,
+      );
+      expect(firstPlan.skippedDuplicates, hasLength(1));
+      expect(
+        firstPlan.skippedDuplicates.single.candidate.archiveEntryPath,
+        'beginner/sonata.mxl',
+      );
+      expect(firstPlan.attachments, hasLength(1));
+      final attached = firstPlan.attachments.single.variants.single;
+      expect(attached.effectiveFileName, 'advanced/sonata.mxl');
+      expect(attached.difficultyTier, DifficultyTier.advanced);
+
+      final updatedExisting = Piece(
+        id: existing.id,
+        title: existing.title,
+        artist: existing.artist,
+        scale: existing.scale,
+        variants: <ScoreVariant>[
+          ...existing.variants,
+          ScoreVariant(
+            id: 'v_adv',
+            pieceId: existing.id,
+            difficultyTier: attached.difficultyTier,
+            label: attached.difficultyTier.label,
+            fileName: attached.effectiveFileName,
+            storedRelativePath: 'scores/v_adv.mxl',
+            importedAtMs: 20,
+          ),
+        ],
+      );
+
+      final reimportPlan = CatalogBatchImportPlanner.plan(
+        existingPieces: <Piece>[updatedExisting],
+        candidates: zipCandidates,
+      );
+      expect(reimportPlan.hasImports, isFalse);
+      expect(reimportPlan.attachments, isEmpty);
+      expect(reimportPlan.newPieces, isEmpty);
+      expect(reimportPlan.skippedDuplicates, hasLength(2));
+    });
+
+    test('hash-indexed deduplication keeps distinct same-length payloads and skips byte-identical ones', () {
+      final plan = CatalogBatchImportPlanner.plan(
+        existingPieces: const <Piece>[],
+        candidates: <ImportedScoreCandidate>[
+          _candidate(
+            fileName: 'a.mxl',
+            title: 'Invention',
+            artist: 'Bach',
+            bytes: const <int>[1, 2, 3, 4],
+          ),
+          _candidate(
+            fileName: 'b.mxl',
+            title: 'Invention',
+            artist: 'Bach',
+            bytes: const <int>[1, 2, 3, 5],
+          ),
+          _candidate(
+            fileName: 'c.mxl',
+            title: 'Invention',
+            artist: 'Bach',
+            bytes: const <int>[1, 2, 3, 4],
+          ),
+        ],
+      );
+      expect(plan.newPieces.single.variants, hasLength(2));
+      expect(plan.skippedDuplicates, hasLength(1));
+    });
   });
 }

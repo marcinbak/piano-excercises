@@ -27,31 +27,47 @@ final class ZipBundleScoreExtractor {
   final int maxSingleScoreBytes;
 
   /// Validates the outer ZIP structure and parses every `.mxl`/`.musicxml` score entry.
-  Future<ScoreImportSelection> extractBundle(Uint8List bytes) async {
+  Future<ScoreImportSelection> extractBundle(
+    Uint8List bytes, {
+    int? maxUncompressedBytes,
+    int? maxArchiveEntries,
+    void Function(String message)? onBudgetExceeded,
+  }) async {
+    final limits = _resolveEffectiveLimits(
+      maxUncompressedBytes: maxUncompressedBytes,
+      maxArchiveEntries: maxArchiveEntries,
+      onBudgetExceeded: onBudgetExceeded,
+    );
     final directory = readBoundedZipDirectory(
       bytes,
       maxArchiveBytes: maxTotalUncompressedBytes,
-      maxEntries: maxEntries,
+      maxEntries: limits.maxEntries,
+      onEntryLimitExceeded: onBudgetExceeded,
     );
     MxlEntryValidator.validateAllHeaders(
       bytes,
       directory.fileHeaders,
-      maxUncompressedBytes: maxTotalUncompressedBytes,
+      maxUncompressedBytes: limits.maxBytes,
+      maxSingleEntryBytes: math.min(maxSingleScoreBytes, limits.maxBytes),
+      onSizeLimitExceeded: onBudgetExceeded,
     );
 
     final budget = DecodeBudget(
-      maxTotalUncompressedBytes,
+      limits.maxBytes,
       errorMessage: 'Decompressed .zip bundle content exceeds maximum uncompressed byte limit.',
     );
     final candidates = <ImportedScoreCandidate>[];
     final failures = <ScoreImportFailure>[];
-    final ignoredNonScoreCount = await _extractEntries(
+    final outcome = await _extractEntries(
       headers: directory.fileHeaders,
       budget: budget,
       candidates: candidates,
       failures: failures,
     );
-
+    if (outcome.budgetExceeded) {
+      onBudgetExceeded?.call(budget.errorMessage);
+      throw ScoreParseException(budget.errorMessage);
+    }
     if (candidates.isEmpty) {
       throw ScoreParseException(
         failures.isNotEmpty
@@ -59,16 +75,40 @@ final class ZipBundleScoreExtractor {
             : 'No .mxl or .musicxml scores found in archive.',
       );
     }
-
     return ScoreImportSelection(
       candidates: candidates,
       failures: failures,
-      ignoredNonScoreCount: ignoredNonScoreCount,
+      ignoredNonScoreCount: outcome.ignoredNonScoreCount,
       isBundle: true,
     );
   }
 
-  Future<int> _extractEntries({
+  ({int maxBytes, int maxEntries}) _resolveEffectiveLimits({
+    required int? maxUncompressedBytes,
+    required int? maxArchiveEntries,
+    required void Function(String message)? onBudgetExceeded,
+  }) {
+    final effectiveMaxBytes = maxUncompressedBytes == null
+        ? maxTotalUncompressedBytes
+        : math.min(maxUncompressedBytes, maxTotalUncompressedBytes);
+    final effectiveMaxEntries = maxArchiveEntries == null
+        ? maxEntries
+        : math.min(maxArchiveEntries, maxEntries);
+    if (effectiveMaxBytes <= 0) {
+      const msg =
+          'Decompressed .zip bundle content exceeds maximum uncompressed byte limit.';
+      onBudgetExceeded?.call(msg);
+      throw const ScoreParseException(msg);
+    }
+    if (effectiveMaxEntries <= 0) {
+      final msg = 'Archive entry count must be between 1 and $maxEntries.';
+      onBudgetExceeded?.call(msg);
+      throw ScoreParseException(msg);
+    }
+    return (maxBytes: effectiveMaxBytes, maxEntries: effectiveMaxEntries);
+  }
+
+  Future<({int ignoredNonScoreCount, bool budgetExceeded})> _extractEntries({
     required List<ZipFileHeader> headers,
     required DecodeBudget budget,
     required List<ImportedScoreCandidate> candidates,
@@ -102,6 +142,12 @@ final class ZipBundleScoreExtractor {
         baseName: baseName,
         budget: budget,
       );
+      if (budget.exceeded) {
+        return (
+          ignoredNonScoreCount: ignoredNonScoreCount,
+          budgetExceeded: true,
+        );
+      }
       if (result.candidate != null) {
         candidates.add(result.candidate!);
       } else if (result.failure != null) {
@@ -112,7 +158,7 @@ final class ZipBundleScoreExtractor {
         await Future<void>.delayed(Duration.zero);
       }
     }
-    return ignoredNonScoreCount;
+    return (ignoredNonScoreCount: ignoredNonScoreCount, budgetExceeded: false);
   }
 
   ({ImportedScoreCandidate? candidate, ScoreImportFailure? failure})

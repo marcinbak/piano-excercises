@@ -279,4 +279,74 @@ void main() {
       throwsA(isA<ScoreParseException>()),
     );
   });
+
+  test('enforces cumulative uncompressed byte and 500-candidate caps across multi-.zip selections', () async {
+    final xmlBytes = File('test/fixtures/simplified_melody_bass.musicxml')
+        .readAsBytesSync();
+    final xmlText = utf8.decode(xmlBytes);
+    final paddedXml = utf8.encode(
+      xmlText.replaceFirst(
+        '</score-partwise>',
+        '<!-- ${'a' * 8000} --></score-partwise>',
+      ),
+    );
+    final paddedBytes = Uint8List.fromList(paddedXml);
+
+    final zipA = _wrapBundleZip(<String, Uint8List>{
+      'a1.musicxml': paddedBytes,
+      'a2.musicxml': paddedBytes,
+    });
+    final zipB = _wrapBundleZip(<String, Uint8List>{
+      'b1.musicxml': paddedBytes,
+      'b2.musicxml': paddedBytes,
+    });
+    final maxBundleCap = (paddedBytes.length * 3);
+    expect(zipA.length + zipB.length, lessThan(maxBundleCap));
+
+    final multiZipOverBytes = FilePickerScoreImporter(
+      maxBytes: paddedBytes.length + 1024,
+      maxBundleBytes: maxBundleCap,
+      pickFiles: () async => <PlatformFile>[
+        _FakePlatformFile(
+          name: 'bundle_a.zip',
+          knownLength: zipA.length,
+          chunks: <Uint8List>[zipA],
+        ),
+        _FakePlatformFile(
+          name: 'bundle_b.zip',
+          knownLength: zipB.length,
+          chunks: <Uint8List>[zipB],
+        ),
+      ],
+    );
+    await expectLater(
+      multiZipOverBytes.pickAndParseScores,
+      throwsA(isA<ScoreParseException>()),
+    );
+
+    final zip300 = _wrapBundleZip(<String, Uint8List>{
+      for (var i = 0; i < 300; i += 1) 's_$i.musicxml': xmlBytes,
+    });
+    final zip201 = _wrapBundleZip(<String, Uint8List>{
+      for (var i = 0; i < 201; i += 1) 't_$i.musicxml': xmlBytes,
+    });
+    final multiZipOver500 = FilePickerScoreImporter(
+      pickFiles: () async => <PlatformFile>[
+        _FakePlatformFile(
+          name: 'part1.zip',
+          knownLength: zip300.length,
+          chunks: <Uint8List>[zip300],
+        ),
+        _FakePlatformFile(
+          name: 'part2.zip',
+          knownLength: zip201.length,
+          chunks: <Uint8List>[zip201],
+        ),
+      ],
+    );
+    await expectLater(
+      multiZipOver500.pickAndParseScores,
+      throwsA(isA<ScoreParseException>()),
+    );
+  });
 }
