@@ -12,7 +12,9 @@ import 'package:piano_exercises/features/catalog/ui/score_import_sheet.dart';
 
 /// Displays the searchable piece catalog and runtime `.mxl`/`.musicxml` importer.
 class CatalogScreen extends ConsumerStatefulWidget {
-  const CatalogScreen({super.key});
+  const CatalogScreen({super.key, this.onSelectVariant});
+
+  final void Function(Piece piece, ScoreVariant variant)? onSelectVariant;
 
   @override
   ConsumerState<CatalogScreen> createState() => _CatalogScreenState();
@@ -111,6 +113,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
             final piece = snapshot.pieces[index];
             return PieceCatalogCard(
               piece: piece,
+              onSelectVariant: widget.onSelectVariant,
               onAttachVariant: () =>
                   unawaited(_startImport(initialTargetPiece: piece)),
               onDeletePiece: () => unawaited(_confirmDeletePiece(piece)),

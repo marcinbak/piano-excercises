@@ -16,6 +16,7 @@ class GrandStaffScorePainter extends CustomPainter {
     required this.layout,
     this.activeSliceIndex,
     this.dimmedClef,
+    this.activeHand = NotationHandFilter.both,
     this.wrongNoteOverlays = const <WrongNoteOverlay>[],
     this.visibleRect,
   });
@@ -23,8 +24,11 @@ class GrandStaffScorePainter extends CustomPainter {
   final EngravedScoreLayout layout;
   final int? activeSliceIndex;
   final SmuflClef? dimmedClef;
+  final NotationHandFilter activeHand;
   final List<WrongNoteOverlay> wrongNoteOverlays;
   final Rect? visibleRect;
+
+  SmuflClef? get effectiveDimmedClef => dimmedClef ?? activeHand.dimmedClef;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -152,6 +156,7 @@ class GrandStaffScorePainter extends CustomPainter {
     ({Color treble, Color bass}) colors,
   ) {
     final sp = system.staffSpace;
+    final dimmed = effectiveDimmedClef;
     for (final slice in measure.slices) {
       ScorePainterChordRenderer.paintChord(
         canvas,
@@ -159,6 +164,7 @@ class GrandStaffScorePainter extends CustomPainter {
         slice.trebleChord,
         style,
         colors.treble,
+        isDimmed: dimmed == SmuflClef.treble,
       );
       ScorePainterChordRenderer.paintChord(
         canvas,
@@ -166,6 +172,7 @@ class GrandStaffScorePainter extends CustomPainter {
         slice.bassChord,
         style,
         colors.bass,
+        isDimmed: dimmed == SmuflClef.bass,
       );
       ScorePainterChordRenderer.paintRest(
         canvas,
@@ -208,7 +215,8 @@ class GrandStaffScorePainter extends CustomPainter {
     }
   }
 
-  Color _clefInk(ScoreStyle style, SmuflClef clef) => dimmedClef == clef
+  Color _clefInk(ScoreStyle style, SmuflClef clef) =>
+      effectiveDimmedClef == clef
       ? style.inkColor.withValues(alpha: style.dimmedOpacity)
       : style.inkColor;
 
@@ -217,6 +225,7 @@ class GrandStaffScorePainter extends CustomPainter {
     return !identical(oldDelegate.layout, layout) ||
         oldDelegate.activeSliceIndex != activeSliceIndex ||
         oldDelegate.dimmedClef != dimmedClef ||
+        oldDelegate.activeHand != activeHand ||
         oldDelegate.visibleRect != visibleRect ||
         !_overlaysEqual(oldDelegate.wrongNoteOverlays, wrongNoteOverlays);
   }

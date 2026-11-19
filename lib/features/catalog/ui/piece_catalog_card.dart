@@ -9,12 +9,14 @@ class PieceCatalogCard extends StatelessWidget {
     required this.onAttachVariant,
     required this.onDeletePiece,
     required this.onDeleteVariant,
+    this.onSelectVariant,
   });
 
   final Piece piece;
   final VoidCallback onAttachVariant;
   final VoidCallback onDeletePiece;
   final ValueChanged<ScoreVariant> onDeleteVariant;
+  final void Function(Piece piece, ScoreVariant variant)? onSelectVariant;
 
   @override
   Widget build(BuildContext context) {
@@ -24,69 +26,78 @@ class PieceCatalogCard extends StatelessWidget {
     return Card(
       key: ValueKey<String>('piece-card-${piece.id}'),
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(piece.title, style: theme.textTheme.titleMedium),
-                      if (piece.artist.isNotEmpty) ...<Widget>[
-                        const SizedBox(height: 2),
-                        Text(
-                          piece.artist,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: colorScheme.onSurfaceVariant,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onSelectVariant == null
+            ? null
+            : () => onSelectVariant!(piece, piece.variants.first),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        Text(piece.title, style: theme.textTheme.titleMedium),
+                        if (piece.artist.isNotEmpty) ...<Widget>[
+                          const SizedBox(height: 2),
+                          Text(
+                            piece.artist,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                IconButton(
-                  key: ValueKey<String>(
-                    'piece-attach-variant-button-${piece.id}',
+                  IconButton(
+                    key: ValueKey<String>(
+                      'piece-attach-variant-button-${piece.id}',
+                    ),
+                    tooltip: 'Attach arrangement',
+                    icon: const Icon(Icons.add_circle_outline),
+                    onPressed: onAttachVariant,
                   ),
-                  tooltip: 'Attach arrangement',
-                  icon: const Icon(Icons.add_circle_outline),
-                  onPressed: onAttachVariant,
-                ),
-                IconButton(
-                  key: ValueKey<String>('piece-delete-button-${piece.id}'),
-                  tooltip: 'Delete piece',
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: onDeletePiece,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 6,
-              children: <Widget>[
-                _MetaTag(label: piece.scale.label),
-                _MetaTag(label: piece.difficultySummary),
-                _MetaTag(
-                  label: piece.variants.length == 1
-                      ? '1 arrangement'
-                      : '${piece.variants.length} arrangements',
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            for (final variant in piece.variants)
-              _VariantRow(
-                pieceId: piece.id,
-                variant: variant,
-                onDelete: () => onDeleteVariant(variant),
+                  IconButton(
+                    key: ValueKey<String>('piece-delete-button-${piece.id}'),
+                    tooltip: 'Delete piece',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: onDeletePiece,
+                  ),
+                ],
               ),
-          ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                children: <Widget>[
+                  _MetaTag(label: piece.scale.label),
+                  _MetaTag(label: piece.difficultySummary),
+                  _MetaTag(
+                    label: piece.variants.length == 1
+                        ? '1 arrangement'
+                        : '${piece.variants.length} arrangements',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              for (final variant in piece.variants)
+                _VariantRow(
+                  pieceId: piece.id,
+                  variant: variant,
+                  onOpen: onSelectVariant == null
+                      ? null
+                      : () => onSelectVariant!(piece, variant),
+                  onDelete: () => onDeleteVariant(variant),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -120,11 +131,13 @@ class _VariantRow extends StatelessWidget {
   const _VariantRow({
     required this.pieceId,
     required this.variant,
+    required this.onOpen,
     required this.onDelete,
   });
 
   final String pieceId;
   final ScoreVariant variant;
+  final VoidCallback? onOpen;
   final VoidCallback onDelete;
 
   @override
@@ -134,7 +147,6 @@ class _VariantRow extends StatelessWidget {
     return Container(
       key: ValueKey<String>('piece-variant-badge-$pieceId-${variant.id}'),
       margin: const EdgeInsets.only(top: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(10),
@@ -142,21 +154,44 @@ class _VariantRow extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  'Tier ${variant.difficultyTier.tier}: ${variant.label}',
-                  style: theme.textTheme.labelLarge,
+            child: InkWell(
+              key: ValueKey<String>('open_variant_${variant.id}'),
+              borderRadius: BorderRadius.circular(10),
+              onTap: onOpen,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
                 ),
-                Text(
-                  variant.fileName,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            'Tier ${variant.difficultyTier.tier}: ${variant.label}',
+                            style: theme.textTheme.labelLarge,
+                          ),
+                          Text(
+                            variant.fileName,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (onOpen != null)
+                      Icon(
+                        Icons.chevron_right,
+                        size: 18,
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
           IconButton(

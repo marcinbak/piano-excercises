@@ -10,6 +10,19 @@ enum SmuflClef {
   final int referenceStep;
 }
 
+/// Active hand practice filter controlling which staff is dimmed.
+enum NotationHandFilter {
+  both,
+  right,
+  left;
+
+  SmuflClef? get dimmedClef => switch (this) {
+    NotationHandFilter.both => null,
+    NotationHandFilter.right => SmuflClef.bass,
+    NotationHandFilter.left => SmuflClef.treble,
+  };
+}
+
 /// Chromatic alteration glyph and semitone offset (`-2..+2`).
 enum SmuflAccidental {
   doubleFlat(semitoneDelta: -2, glyph: SmuflGlyphs.accidentalDoubleFlat),
@@ -65,6 +78,22 @@ enum DurationKind {
     hasStem: true,
     noteheadGlyph: SmuflGlyphs.noteheadBlack,
     restGlyph: SmuflGlyphs.rest16th,
+  ),
+  thirtySecond(
+    quarterBeats: 0.125,
+    beamCount: 3,
+    isHollow: false,
+    hasStem: true,
+    noteheadGlyph: SmuflGlyphs.noteheadBlack,
+    restGlyph: SmuflGlyphs.rest32nd,
+  ),
+  sixtyFourth(
+    quarterBeats: 0.0625,
+    beamCount: 4,
+    isHollow: false,
+    hasStem: true,
+    noteheadGlyph: SmuflGlyphs.noteheadBlack,
+    restGlyph: SmuflGlyphs.rest64th,
   );
 
   const DurationKind({
@@ -106,8 +135,9 @@ final class NotationNote {
     this.showAccidental = false,
     this.tie = TieFlag.none,
     this.noteId,
+    this.noteheadDuration,
   }) {
-    RangeError.checkValueInInterval(staffStep, -40, 40, 'staffStep');
+    RangeError.checkValueInInterval(staffStep, -60, 60, 'staffStep');
   }
 
   final int staffStep;
@@ -116,6 +146,7 @@ final class NotationNote {
   final bool showAccidental;
   final TieFlag tie;
   final String? noteId;
+  final DurationKind? noteheadDuration;
 
   SmuflAccidental? get displayedAccidental =>
       showAccidental ? accidental : null;
@@ -129,12 +160,20 @@ final class NotationNote {
             other.accidental == accidental &&
             other.showAccidental == showAccidental &&
             other.tie == tie &&
-            other.noteId == noteId);
+            other.noteId == noteId &&
+            other.noteheadDuration == noteheadDuration);
   }
 
   @override
-  int get hashCode =>
-      Object.hash(staffStep, clef, accidental, showAccidental, tie, noteId);
+  int get hashCode => Object.hash(
+    staffStep,
+    clef,
+    accidental,
+    showAccidental,
+    tie,
+    noteId,
+    noteheadDuration,
+  );
 }
 
 /// One or more simultaneous notes sharing a stem/duration on one [clef].

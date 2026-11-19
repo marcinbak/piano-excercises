@@ -32,12 +32,18 @@ abstract final class SmuflGlyphs {
   static const String flag8thDown = '\uE241';
   static const String flag16thUp = '\uE242';
   static const String flag16thDown = '\uE243';
+  static const String flag32ndUp = '\uE244';
+  static const String flag32ndDown = '\uE245';
+  static const String flag64thUp = '\uE246';
+  static const String flag64thDown = '\uE247';
 
   static const String restWhole = '\uE4E3';
   static const String restHalf = '\uE4E4';
   static const String restQuarter = '\uE4E5';
   static const String rest8th = '\uE4E6';
   static const String rest16th = '\uE4E7';
+  static const String rest32nd = '\uE4E8';
+  static const String rest64th = '\uE4E9';
 
   static const double noteheadWidthSpaces = 1.18;
   static const double wholeNoteheadWidthSpaces = 1.69;

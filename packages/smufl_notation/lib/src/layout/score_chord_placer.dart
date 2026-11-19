@@ -94,7 +94,7 @@ abstract final class ScoreChordPlacer {
       note: note,
       centerX: center.$1,
       centerY: center.$2,
-      glyph: chord.duration.noteheadGlyph,
+      glyph: (note.noteheadDuration ?? chord.duration).noteheadGlyph,
       dots: chord.dots,
       ledgerSteps: ScoreMeasurePreparer.ledgerStepsFor(note.staffStep),
       dotStartX: chord.dots > 0 ? dotBaseX : null,

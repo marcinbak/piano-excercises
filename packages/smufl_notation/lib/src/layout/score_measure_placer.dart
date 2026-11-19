@@ -70,13 +70,18 @@ abstract final class ScoreMeasurePlacer {
     final scale = spec.headerScale;
     var cursorX =
         spec.leftX + (spec.isSystemStart ? 3.5 * sp * scale : 0.6 * sp * scale);
-    final showKey =
-        (spec.isSystemStart || prep.keyChanged) && prep.activeKeyFifths != 0;
+    final entries = ScoreMeasurePreparer.keySignatureEntries(
+      isSystemStart: spec.isSystemStart,
+      keyChanged: prep.keyChanged,
+      previousKeyFifths: prep.previousKeyFifths,
+      activeKeyFifths: prep.activeKeyFifths,
+    );
+    final showKey = entries.isNotEmpty;
     final keyAcc = <PlacedAccidental>[];
     if (showKey) {
       cursorX = _appendKeySignature(
         keyAcc: keyAcc,
-        fifths: prep.activeKeyFifths,
+        entries: entries,
         system: spec.system,
         cursorX: cursorX,
         headerScale: scale,
@@ -103,6 +108,18 @@ abstract final class ScoreMeasurePlacer {
   ) {
     final slices = spec.prep.slices;
     final bodyAvail = math.max(1.0, spec.rightX - bodyStart);
+    final bodyCenterX = (bodyStart + spec.rightX) * 0.5;
+    final isSingleRestOnlySlice =
+        slices.length == 1 &&
+        slices.single.slice.trebleChord == null &&
+        slices.single.slice.bassChord == null &&
+        (slices.single.slice.trebleRest != null ||
+            slices.single.slice.bassRest != null);
+    final centerTrebleWholeRest = _hasSingleWholeRestOnly(
+      slices,
+      SmuflClef.treble,
+    );
+    final centerBassWholeRest = _hasSingleWholeRestOnly(slices, SmuflClef.bass);
     final minSum = slices.fold<double>(0.0, (sum, p) => sum + p.minWidth);
     final scale = minSum > 0 ? bodyAvail / minSum : 1.0;
 
@@ -115,15 +132,53 @@ abstract final class ScoreMeasurePlacer {
           ? spec.rightX
           : sliceX + (p.minWidth * scale);
       final sliceWidth = sRight - sLeft;
-      final centerX = sliceWidth <= 1.0
-          ? (sLeft + sRight) * 0.5
-          : (sLeft + (p.minLeftPad * scale)).clamp(sLeft + 0.5, sRight - 0.5);
+      final centerX = isSingleRestOnlySlice
+          ? bodyCenterX
+          : (sliceWidth <= 1.0
+                ? (sLeft + sRight) * 0.5
+                : (sLeft + (p.minLeftPad * scale)).clamp(
+                    sLeft + 0.5,
+                    sRight - 0.5,
+                  ));
       rawSlices.add(
-        _placeSingleSlice(p, spec.system, sLeft, sRight, centerX, spec.sp),
+        _placeSingleSlice(
+          p,
+          spec.system,
+          sLeft,
+          sRight,
+          centerX,
+          spec.sp,
+          trebleRestCenterX: centerTrebleWholeRest ? bodyCenterX : centerX,
+          bassRestCenterX: centerBassWholeRest ? bodyCenterX : centerX,
+        ),
       );
       sliceX = sRight;
     }
     return rawSlices;
+  }
+
+  static bool _hasSingleWholeRestOnly(
+    List<PreparedSlice> slices,
+    SmuflClef clef,
+  ) {
+    var restCount = 0;
+    var hasWholeRest = false;
+    for (final p in slices) {
+      final chord = clef == SmuflClef.treble
+          ? p.slice.trebleChord
+          : p.slice.bassChord;
+      if (chord != null) {
+        return false;
+      }
+      final rest = clef == SmuflClef.treble
+          ? p.slice.trebleRest
+          : p.slice.bassRest;
+      if (rest != null) {
+        restCount += 1;
+        hasWholeRest = rest.duration == DurationKind.whole;
+      }
+    }
+    return restCount == 1 && hasWholeRest;
   }
 
   static SliceGeometry _placeSingleSlice(
@@ -132,8 +187,10 @@ abstract final class ScoreMeasurePlacer {
     double sLeft,
     double sRight,
     double centerX,
-    double sp,
-  ) {
+    double sp, {
+    required double trebleRestCenterX,
+    required double bassRestCenterX,
+  }) {
     return SliceGeometry(
       sliceIndex: p.slice.sliceIndex,
       centerX: centerX,
@@ -160,13 +217,13 @@ abstract final class ScoreMeasurePlacer {
       trebleRest: ScoreChordPlacer.placeRest(
         p.slice.trebleRest,
         system,
-        centerX,
+        trebleRestCenterX,
         sp,
       ),
       bassRest: ScoreChordPlacer.placeRest(
         p.slice.bassRest,
         system,
-        centerX,
+        bassRestCenterX,
         sp,
       ),
     );
@@ -213,43 +270,36 @@ abstract final class ScoreMeasurePlacer {
 
   static double _appendKeySignature({
     required List<PlacedAccidental> keyAcc,
-    required int fifths,
+    required List<({SmuflAccidental accidental, int trebleStep, int bassStep})>
+    entries,
     required SystemGeometry system,
     required double cursorX,
     required double headerScale,
     required double sp,
   }) {
-    final accType = fifths > 0 ? SmuflAccidental.sharp : SmuflAccidental.flat;
-    final tSteps = ScoreMeasurePreparer.keySignatureSteps(
-      SmuflClef.treble,
-      fifths,
-    );
-    final bSteps = ScoreMeasurePreparer.keySignatureSteps(
-      SmuflClef.bass,
-      fifths,
-    );
-    for (var k = 0; k < tSteps.length; k += 1) {
+    for (var k = 0; k < entries.length; k += 1) {
+      final entry = entries[k];
       final ax = cursorX + ((0.45 + (k * 1.02)) * sp * headerScale);
       keyAcc
         ..add(
           PlacedAccidental(
-            accidental: accType,
+            accidental: entry.accidental,
             clef: SmuflClef.treble,
             centerX: ax,
-            centerY: system.yForStep(SmuflClef.treble, tSteps[k]),
-            glyph: accType.glyph,
+            centerY: system.yForStep(SmuflClef.treble, entry.trebleStep),
+            glyph: entry.accidental.glyph,
           ),
         )
         ..add(
           PlacedAccidental(
-            accidental: accType,
+            accidental: entry.accidental,
             clef: SmuflClef.bass,
             centerX: ax,
-            centerY: system.yForStep(SmuflClef.bass, bSteps[k]),
-            glyph: accType.glyph,
+            centerY: system.yForStep(SmuflClef.bass, entry.bassStep),
+            glyph: entry.accidental.glyph,
           ),
         );
     }
-    return cursorX + (((tSteps.length * 1.02) + 0.55) * sp * headerScale);
+    return cursorX + (((entries.length * 1.02) + 0.55) * sp * headerScale);
   }
 }

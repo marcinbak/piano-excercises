@@ -62,7 +62,7 @@ abstract final class ScoreLayoutEngine {
     final tiesByMeasure = <int, List<PlacedTieArc>>{};
     ScoreTieSolver.resolveTies(
       systems: rawSystems,
-      tiesByMeasureNumber: tiesByMeasure,
+      tiesByMeasureIndex: tiesByMeasure,
       staffSpace: sp,
     );
 
@@ -213,6 +213,7 @@ abstract final class ScoreLayoutEngine {
     List<SystemGeometry> rawSystems,
     Map<int, List<PlacedTieArc>> tiesByMeasure,
   ) {
+    var measureIndex = 0;
     return <SystemGeometry>[
       for (final sys in rawSystems)
         SystemGeometry(
@@ -242,7 +243,7 @@ abstract final class ScoreLayoutEngine {
                 slices: m.slices,
                 beamGroups: m.beamGroups,
                 tieArcs: List<PlacedTieArc>.unmodifiable(
-                  tiesByMeasure[m.measureNumber] ?? const <PlacedTieArc>[],
+                  tiesByMeasure[measureIndex++] ?? const <PlacedTieArc>[],
                 ),
                 isSystemStart: m.isSystemStart,
                 isFinalMeasure: m.isFinalMeasure,

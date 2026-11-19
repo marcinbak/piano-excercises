@@ -405,4 +405,76 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'invokes onSelectVariant when tapping a variant row or the piece card',
+    (tester) async {
+      final repo = InMemoryCatalogRepository();
+      final store = InMemoryScoreFileStore();
+      final importSource = _QueuedScoreImportSource();
+      final candidate = _fixtureCandidate(
+        'test/fixtures/simplified_melody_bass.musicxml',
+        fileName: 'melody.musicxml',
+      );
+      final v1 = ScoreVariant(
+        id: 'var_1',
+        pieceId: 'piece_1',
+        difficultyTier: DifficultyTier.beginner,
+        label: 'Easy',
+        fileName: 'easy.musicxml',
+        storedRelativePath: 'scores/var_1.musicxml',
+        importedAtMs: 1,
+      );
+      final v2 = ScoreVariant(
+        id: 'var_2',
+        pieceId: 'piece_1',
+        difficultyTier: DifficultyTier.advanced,
+        label: 'Hard',
+        fileName: 'hard.musicxml',
+        storedRelativePath: 'scores/var_2.musicxml',
+        importedAtMs: 2,
+      );
+      final piece = Piece(
+        id: 'piece_1',
+        title: 'Waltz in G',
+        artist: 'Composer',
+        scale: candidate.parsedScore.metadata.scale,
+        variants: <ScoreVariant>[v1, v2],
+      );
+      await repo.createPiece(piece);
+
+      final selected = <(String pieceId, String variantId)>[];
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            catalogRepositoryProvider.overrideWith((ref) {
+              ref.onDispose(repo.close);
+              return repo;
+            }),
+            scoreFileStoreProvider.overrideWithValue(store),
+            scoreImportSourceProvider.overrideWithValue(importSource),
+          ],
+          child: MaterialApp(
+            home: CatalogScreen(
+              onSelectVariant: (p, v) => selected.add((p.id, v.id)),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('open_variant_var_2')),
+      );
+      await tester.pump();
+      expect(selected, <(String, String)>[('piece_1', 'var_2')]);
+
+      await tester.tap(find.text('Waltz in G'));
+      await tester.pump();
+      expect(selected, <(String, String)>[
+        ('piece_1', 'var_2'),
+        ('piece_1', 'var_1'),
+      ]);
+    },
+  );
 }

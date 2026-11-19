@@ -14,13 +14,21 @@ abstract final class ScorePainterChordRenderer {
     SystemGeometry system,
     PlacedChord? chord,
     ScoreStyle style,
-    Color color,
-  ) {
+    Color color, {
+    bool isDimmed = false,
+  }) {
     if (chord == null) {
       return;
     }
     final glyphStyle = style.glyphStyle(color);
-    _paintNoteheads(canvas, system, chord, style, glyphStyle);
+    _paintNoteheads(
+      canvas,
+      system,
+      chord,
+      style,
+      glyphStyle,
+      isDimmed: isDimmed,
+    );
     for (final acc in chord.accidentals) {
       paintSmuflGlyph(
         canvas: canvas,
@@ -37,11 +45,15 @@ abstract final class ScorePainterChordRenderer {
     SystemGeometry system,
     PlacedChord chord,
     ScoreStyle style,
-    TextStyle glyphStyle,
-  ) {
+    TextStyle glyphStyle, {
+    required bool isDimmed,
+  }) {
     final sp = system.staffSpace;
+    final ledgerColor = isDimmed
+        ? style.staffLineColor.withValues(alpha: style.dimmedOpacity)
+        : style.staffLineColor;
     final ledgerPaint = Paint()
-      ..color = style.staffLineColor
+      ..color = ledgerColor
       ..strokeWidth = math.max(1.0, sp * 0.10);
 
     for (final head in chord.noteheads) {
@@ -97,9 +109,7 @@ abstract final class ScorePainterChordRenderer {
         ..strokeWidth = stemWidth,
     );
     if (chord.flagCount > 0) {
-      final flagGlyph = chord.flagCount >= 2
-          ? (chord.stemUp ? SmuflGlyphs.flag16thUp : SmuflGlyphs.flag16thDown)
-          : (chord.stemUp ? SmuflGlyphs.flag8thUp : SmuflGlyphs.flag8thDown);
+      final flagGlyph = _flagGlyph(chord.flagCount, chord.stemUp);
       paintSmuflGlyph(
         canvas: canvas,
         glyph: flagGlyph,
@@ -109,6 +119,13 @@ abstract final class ScorePainterChordRenderer {
       );
     }
   }
+
+  static String _flagGlyph(int flagCount, bool stemUp) => switch (flagCount) {
+    1 => stemUp ? SmuflGlyphs.flag8thUp : SmuflGlyphs.flag8thDown,
+    2 => stemUp ? SmuflGlyphs.flag16thUp : SmuflGlyphs.flag16thDown,
+    3 => stemUp ? SmuflGlyphs.flag32ndUp : SmuflGlyphs.flag32ndDown,
+    _ => stemUp ? SmuflGlyphs.flag64thUp : SmuflGlyphs.flag64thDown,
+  };
 
   static void paintRest(
     Canvas canvas,

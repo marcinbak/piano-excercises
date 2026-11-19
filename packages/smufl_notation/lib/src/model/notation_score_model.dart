@@ -77,8 +77,8 @@ final class NotationMeasure {
     this.beats,
     this.beatType,
   }) : slices = List<NotationSlice>.unmodifiable(slices) {
-    if (measureNumber < 1) {
-      throw RangeError.range(measureNumber, 1, null, 'measureNumber');
+    if (measureNumber < 0) {
+      throw RangeError.range(measureNumber, 0, null, 'measureNumber');
     }
     if (keyFifths != null) {
       RangeError.checkValueInInterval(keyFifths!, -7, 7, 'keyFifths');
