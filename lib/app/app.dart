@@ -25,25 +25,31 @@ Future<PianoExercisesRoot> bootstrapPianoExercisesRoot({
   }
 
   CatalogRepository catalogRepository;
+  var catalogOpenedCleanly = false;
   try {
     catalogRepository =
         await (createCatalogRepository ?? SqliteCatalogRepository.open)();
+    catalogOpenedCleanly = true;
   } catch (_) {
     catalogRepository = InMemoryCatalogRepository();
   }
 
   ScoreFileStore scoreFileStore;
+  var scoreStoreOpenedCleanly = false;
   try {
     scoreFileStore = await (createScoreFileStore ?? AppDocsScoreStore.create)();
+    scoreStoreOpenedCleanly = true;
   } catch (_) {
     scoreFileStore = InMemoryScoreFileStore();
   }
 
-  try {
-    final activePaths = await catalogRepository.listStoredRelativePaths();
-    await scoreFileStore.purgeOrphans(activePaths);
-  } catch (_) {
-    // Best-effort orphan cleanup must never block startup.
+  if (catalogOpenedCleanly && scoreStoreOpenedCleanly) {
+    try {
+      final activePaths = await catalogRepository.listStoredRelativePaths();
+      await scoreFileStore.purgeOrphans(activePaths);
+    } catch (_) {
+      // Best-effort orphan cleanup must never block startup.
+    }
   }
 
   return PianoExercisesRoot(
@@ -83,6 +89,12 @@ class PianoExercisesRoot extends StatelessWidget {
           });
           return repository;
         }),
+        scoreParserProvider.overrideWithValue(const MusicXmlScoreParser()),
+        scoreImportSourceProvider.overrideWith(
+          (ref) =>
+              scoreImportSource ??
+              FilePickerScoreImporter(parser: ref.watch(scoreParserProvider)),
+        ),
         if (progressionRepository != null)
           progressionRepositoryProvider.overrideWithValue(
             progressionRepository!,
@@ -96,8 +108,6 @@ class PianoExercisesRoot extends StatelessWidget {
           }),
         if (scoreFileStore != null)
           scoreFileStoreProvider.overrideWithValue(scoreFileStore!),
-        if (scoreImportSource != null)
-          scoreImportSourceProvider.overrideWithValue(scoreImportSource!),
       ],
       child: PianoExercisesApp(home: home),
     );

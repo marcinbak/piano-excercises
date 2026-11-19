@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:piano_exercises/features/catalog/data/file_picker_score_importer.dart';
-import 'package:piano_exercises/features/catalog/data/musicxml_score_parser.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_import_coordinator.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_query.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_repository.dart';
@@ -24,9 +22,11 @@ export 'package:piano_exercises/features/catalog/state/catalog_query_state.dart'
         catalogErrorProvider,
         catalogQueryProvider;
 
-/// Parses imported `.mxl` and `.musicxml` score bytes.
+/// Parses imported `.mxl` and `.musicxml` score bytes; overridden in `app/` and tests.
 final scoreParserProvider = Provider<ScoreParser>((ref) {
-  return const MusicXmlScoreParser();
+  throw UnimplementedError(
+    'scoreParserProvider must be overridden in ProviderScope.',
+  );
 });
 
 /// Catalog metadata persistence boundary; overridden in `app/` and tests.
@@ -43,9 +43,11 @@ final scoreFileStoreProvider = Provider<ScoreFileStore>((ref) {
   return InMemoryScoreFileStore();
 });
 
-/// Interactive score file picker and parser boundary.
+/// Interactive score file picker and parser boundary; overridden in `app/` and tests.
 final scoreImportSourceProvider = Provider<ScoreImportSource>((ref) {
-  return FilePickerScoreImporter(parser: ref.watch(scoreParserProvider));
+  throw UnimplementedError(
+    'scoreImportSourceProvider must be overridden in ProviderScope.',
+  );
 });
 
 /// Wall-clock timestamp source (ms since epoch); overridable in tests.
@@ -142,21 +144,37 @@ class CatalogController extends AsyncNotifier<CatalogSnapshot> {
   Future<void> deleteVariant({
     required String pieceId,
     required String variantId,
-  }) async {
-    await _runMutation(
+  }) {
+    return _runDeletion(
       () => ref
           .read(catalogImportCoordinatorProvider)
           .deleteVariant(pieceId: pieceId, variantId: variantId),
     );
   }
 
-  Future<void> deletePiece(String pieceId) async {
-    await _runMutation(
+  Future<void> deletePiece(String pieceId) {
+    return _runDeletion(
       () => ref.read(catalogImportCoordinatorProvider).deletePiece(pieceId),
     );
   }
 
-  Future<void> refresh() => _reloadSnapshot();
+  Future<void> refresh() async {
+    final query = ref.read(catalogQueryProvider);
+    final repository = ref.read(catalogRepositoryProvider);
+    state = const AsyncLoading<CatalogSnapshot>();
+    try {
+      final snapshot = await _loadSnapshot(repository, query);
+      if (!ref.mounted || ref.read(catalogQueryProvider) != query) {
+        return;
+      }
+      state = AsyncData<CatalogSnapshot>(snapshot);
+    } catch (error, stackTrace) {
+      if (!ref.mounted || ref.read(catalogQueryProvider) != query) {
+        return;
+      }
+      state = AsyncError<CatalogSnapshot>(error, stackTrace);
+    }
+  }
 
   Future<T?> _runMutation<T>(Future<T> Function() action) async {
     ref.read(catalogErrorProvider.notifier).clear();
@@ -175,12 +193,37 @@ class CatalogController extends AsyncNotifier<CatalogSnapshot> {
     }
   }
 
+  Future<void> _runDeletion(Future<Object?> Function() action) async {
+    ref.read(catalogErrorProvider.notifier).clear();
+    Object? deletionError;
+    try {
+      await action();
+    } catch (error) {
+      deletionError = error;
+    }
+    if (!ref.mounted) {
+      return;
+    }
+    // Reload even when post-DB file cleanup fails so UI matches committed DB state.
+    try {
+      await _reloadSnapshot();
+    } catch (reloadError) {
+      deletionError ??= reloadError;
+    }
+    if (deletionError != null && ref.mounted) {
+      ref
+          .read(catalogErrorProvider.notifier)
+          .setError(_formatError(deletionError));
+    }
+  }
+
   Future<void> _reloadSnapshot() async {
+    final query = ref.read(catalogQueryProvider);
     final snapshot = await _loadSnapshot(
       ref.read(catalogRepositoryProvider),
-      ref.read(catalogQueryProvider),
+      query,
     );
-    if (!ref.mounted) {
+    if (!ref.mounted || ref.read(catalogQueryProvider) != query) {
       return;
     }
     state = AsyncData<CatalogSnapshot>(snapshot);
@@ -193,7 +236,7 @@ class CatalogController extends AsyncNotifier<CatalogSnapshot> {
     final pieces = await repository.queryPieces(query);
     final availableScales = await repository.listAvailableScales();
     final totalPieceCount = query.hasActiveFilters
-        ? (await repository.queryPieces()).length
+        ? await repository.countPieces()
         : pieces.length;
     return CatalogSnapshot(
       pieces: List<Piece>.unmodifiable(pieces),

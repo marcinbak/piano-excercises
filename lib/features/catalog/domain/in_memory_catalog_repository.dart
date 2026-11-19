@@ -42,6 +42,12 @@ final class InMemoryCatalogRepository implements CatalogRepository {
   }
 
   @override
+  Future<int> countPieces() async {
+    _ensureOpen();
+    return _pieces.length;
+  }
+
+  @override
   Future<List<Scale>> listAvailableScales() async {
     _ensureOpen();
     final seen = <Scale>{};

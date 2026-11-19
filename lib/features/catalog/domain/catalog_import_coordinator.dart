@@ -138,8 +138,16 @@ final class CatalogImportCoordinator {
             .toList(growable: false) ??
         const <String>[];
     await catalogRepository.deletePiece(pieceId);
+    Object? firstError;
     for (final path in paths) {
-      await scoreFileStore.deleteScoreFile(path);
+      try {
+        await scoreFileStore.deleteScoreFile(path);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError, StackTrace.current);
     }
   }
 

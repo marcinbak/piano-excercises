@@ -16,6 +16,8 @@ final class CatalogStorageException implements Exception {
 abstract interface class CatalogRepository {
   Future<List<Piece>> queryPieces([CatalogQuery query = const CatalogQuery()]);
 
+  Future<int> countPieces();
+
   Future<List<Scale>> listAvailableScales();
 
   Future<Piece?> getPieceById(String pieceId);

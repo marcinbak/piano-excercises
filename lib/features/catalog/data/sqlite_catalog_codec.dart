@@ -165,6 +165,35 @@ Future<Map<String, Object?>?> findPieceRow(
   return rows.isEmpty ? null : rows.first;
 }
 
+/// Queries matching `pieces` and batch-loads child variants within one [txn].
+Future<List<Piece>> queryPiecesInTxn(
+  sqflite.DatabaseExecutor txn,
+  CatalogQuery query,
+  FtsDialect dialect,
+) async {
+  final where = buildCatalogWhereClause(query, dialect);
+  final pieceRows = await txn.rawQuery(
+    'SELECT p.id, p.title, p.artist, p.key_fifths, p.scale_mode '
+    'FROM pieces p ${where.whereSql} '
+    'ORDER BY p.title COLLATE NOCASE ASC, p.id ASC',
+    where.args,
+  );
+  if (pieceRows.isEmpty) {
+    return const <Piece>[];
+  }
+  final pieceIds = pieceRows
+      .map((row) => row['id']! as String)
+      .toList(growable: false);
+  final variantsByPiece = await loadVariantsByPiece(txn, pieceIds);
+  return List<Piece>.unmodifiable(<Piece>[
+    for (final row in pieceRows)
+      pieceFromSqlRow(
+        row,
+        variantsByPiece[row['id']! as String] ?? const <ScoreVariant>[],
+      ),
+  ]);
+}
+
 ScoreVariant _variantFromRow(Map<String, Object?> row) {
   return ScoreVariant(
     id: row['id']! as String,

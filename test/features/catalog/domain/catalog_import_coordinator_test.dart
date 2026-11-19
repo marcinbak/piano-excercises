@@ -57,6 +57,9 @@ class _FailingCatalogRepository implements CatalogRepository {
   Future<List<Piece>> queryPieces([
     CatalogQuery query = const CatalogQuery(),
   ]) => _delegate.queryPieces(query);
+
+  @override
+  Future<int> countPieces() => _delegate.countPieces();
 }
 
 ImportedScoreCandidate _makeCandidate({

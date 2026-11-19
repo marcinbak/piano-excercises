@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:piano_exercises/features/catalog/domain/catalog_repository.dart';
 import 'package:piano_exercises/features/catalog/domain/piece.dart';
 import 'package:piano_exercises/features/catalog/state/catalog_providers.dart';
 import 'package:piano_exercises/features/catalog/ui/catalog_feedback_views.dart';
@@ -134,9 +135,20 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       if (!mounted || candidate == null) {
         return;
       }
-      final existingPieces = await ref
-          .read(catalogRepositoryProvider)
-          .queryPieces();
+      final List<Piece> existingPieces;
+      try {
+        existingPieces = await ref
+            .read(catalogRepositoryProvider)
+            .queryPieces();
+      } catch (error) {
+        if (mounted) {
+          final message = error is CatalogStorageException
+              ? error.message
+              : error.toString();
+          ref.read(catalogErrorProvider.notifier).setError(message);
+        }
+        return;
+      }
       if (!mounted) {
         return;
       }

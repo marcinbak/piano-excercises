@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/app/app.dart';
+import 'package:piano_exercises/features/catalog/catalog.dart';
 import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/features/progression/progression.dart';
+import 'package:piano_exercises/shared/music/music.dart';
 
 class _StubMidiRepository implements MidiRepository {
   final StreamController<List<MidiDeviceInfo>> _devicesController =
@@ -100,4 +103,78 @@ void main() {
       isA<InMemoryProgressionRepository>(),
     );
   });
+
+  test('bootstrapPianoExercisesRoot skips purgeOrphans when catalog repository falls back', () async {
+    final spyStore = _SpyScoreFileStore();
+    final rootOnFailure = await bootstrapPianoExercisesRoot(
+      createProgressionRepository: () async => InMemoryProgressionRepository(),
+      createCatalogRepository: () async {
+        throw StateError('Simulated SQLite failure');
+      },
+      createScoreFileStore: () async => spyStore,
+    );
+    expect(rootOnFailure.catalogRepository, isA<InMemoryCatalogRepository>());
+    expect(spyStore.purgeOrphansCalls, 0);
+
+    final repo = InMemoryCatalogRepository();
+    addTearDown(repo.close);
+    await repo.createPiece(
+      Piece(
+        id: 'p1',
+        title: 'Sonata',
+        artist: 'Mozart',
+        scale: Scale.fromKeySignature(KeySignature.cMajor),
+        variants: <ScoreVariant>[
+          ScoreVariant(
+            id: 'v1',
+            pieceId: 'p1',
+            difficultyTier: DifficultyTier.beginner,
+            label: 'Beginner',
+            fileName: 'sonata.mxl',
+            storedRelativePath: 'scores/v1.mxl',
+            importedAtMs: 1,
+          ),
+        ],
+      ),
+    );
+    await bootstrapPianoExercisesRoot(
+      createProgressionRepository: () async => InMemoryProgressionRepository(),
+      createCatalogRepository: () async => repo,
+      createScoreFileStore: () async => spyStore,
+    );
+    expect(spyStore.purgeOrphansCalls, 1);
+    expect(spyStore.lastActivePaths, {'scores/v1.mxl'});
+  });
+}
+
+class _SpyScoreFileStore implements ScoreFileStore {
+  final InMemoryScoreFileStore _delegate = InMemoryScoreFileStore();
+  int purgeOrphansCalls = 0;
+  Set<String>? lastActivePaths;
+
+  @override
+  Future<void> deleteScoreFile(String storedRelativePath) =>
+      _delegate.deleteScoreFile(storedRelativePath);
+
+  @override
+  Future<int> purgeOrphans(Set<String> activeRelativePaths) async {
+    purgeOrphansCalls += 1;
+    lastActivePaths = Set<String>.of(activeRelativePaths);
+    return _delegate.purgeOrphans(activeRelativePaths);
+  }
+
+  @override
+  Future<Uint8List> readScoreBytes(String storedRelativePath) =>
+      _delegate.readScoreBytes(storedRelativePath);
+
+  @override
+  Future<String> saveScoreBytes({
+    required String variantId,
+    required ScoreFormat format,
+    required Uint8List bytes,
+  }) => _delegate.saveScoreBytes(
+    variantId: variantId,
+    format: format,
+    bytes: bytes,
+  );
 }

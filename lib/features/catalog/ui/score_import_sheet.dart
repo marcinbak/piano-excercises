@@ -61,11 +61,15 @@ class _ScoreImportSheetState extends ConsumerState<ScoreImportSheet> {
     _artistController = TextEditingController(text: meta.artist);
     _variantLabelController = TextEditingController();
     _selectedTier = DifficultyTier.beginner;
-    _attachMode =
-        widget.initialTargetPiece != null && widget.existingPieces.isNotEmpty;
+    final targetId = widget.initialTargetPiece?.id;
+    final targetPresent =
+        targetId != null &&
+        widget.existingPieces.any((piece) => piece.id == targetId);
+    _attachMode = targetPresent;
     if (widget.existingPieces.isNotEmpty) {
-      _selectedPieceId =
-          widget.initialTargetPiece?.id ?? widget.existingPieces.first.id;
+      _selectedPieceId = targetPresent
+          ? targetId
+          : widget.existingPieces.first.id;
     }
   }
 

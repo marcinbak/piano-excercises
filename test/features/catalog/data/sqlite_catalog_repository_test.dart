@@ -317,6 +317,7 @@ void main() {
 
       final allPieces = await repo.queryPieces();
       expect(allPieces, hasLength(461));
+      expect(await repo.countPieces(), 461);
       expect(allPieces.first.id, 'a_piece');
 
       expect(await repo.listAvailableScales(), [cMajor, gMajor]);

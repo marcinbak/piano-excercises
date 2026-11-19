@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
+import 'package:piano_exercises/features/catalog/ui/score_import_sheet.dart';
 
 class _QueuedScoreImportSource implements ScoreImportSource {
   final List<Future<ImportedScoreCandidate?> Function()> _queue =
@@ -317,6 +318,90 @@ void main() {
       expect(
         find.byKey(const ValueKey<String>('catalog-empty-state')),
         findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets(
+    'ScoreImportSheet falls back safely when initialTargetPiece is missing from existingPieces',
+    (tester) async {
+      final repo = InMemoryCatalogRepository();
+      final store = InMemoryScoreFileStore();
+      final importSource = _QueuedScoreImportSource();
+      final candidate = _fixtureCandidate(
+        'test/fixtures/simplified_melody_bass.musicxml',
+        fileName: 'melody.musicxml',
+      );
+      final missingPiece = Piece(
+        id: 'deleted_p1',
+        title: 'Deleted Piece',
+        artist: 'Composer',
+        scale: candidate.parsedScore.metadata.scale,
+        variants: <ScoreVariant>[
+          ScoreVariant(
+            id: 'deleted_v1',
+            pieceId: 'deleted_p1',
+            difficultyTier: DifficultyTier.beginner,
+            label: 'Beginner',
+            fileName: 'deleted.mxl',
+            storedRelativePath: 'scores/deleted_v1.mxl',
+            importedAtMs: 1,
+          ),
+        ],
+      );
+      final survivingPiece = Piece(
+        id: 'surviving_p2',
+        title: 'Surviving Piece',
+        artist: 'Composer',
+        scale: candidate.parsedScore.metadata.scale,
+        variants: <ScoreVariant>[
+          ScoreVariant(
+            id: 'surviving_v2',
+            pieceId: 'surviving_p2',
+            difficultyTier: DifficultyTier.beginner,
+            label: 'Beginner',
+            fileName: 'surviving.mxl',
+            storedRelativePath: 'scores/surviving_v2.mxl',
+            importedAtMs: 2,
+          ),
+        ],
+      );
+
+      var nextId = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            catalogRepositoryProvider.overrideWith((ref) {
+              ref.onDispose(repo.close);
+              return repo;
+            }),
+            scoreFileStoreProvider.overrideWithValue(store),
+            scoreImportSourceProvider.overrideWithValue(importSource),
+            catalogClockMsProvider.overrideWithValue(() => 1700000000000),
+            catalogIdGeneratorProvider.overrideWithValue(
+              () => 'id_${++nextId}',
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ScoreImportSheet(
+                candidate: candidate,
+                existingPieces: <Piece>[survivingPiece],
+                initialTargetPiece: missingPiece,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const ValueKey<String>('import-title-field')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('import-target-piece-selector')),
+        findsNothing,
       );
     },
   );

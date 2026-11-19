@@ -63,29 +63,21 @@ final class SqliteCatalogRepository implements CatalogRepository {
     CatalogQuery query = const CatalogQuery(),
   ]) async {
     try {
-      final where = buildCatalogWhereClause(query, _dialect);
-      final pieceRows = await _db.rawQuery(
-        'SELECT p.id, p.title, p.artist, p.key_fifths, p.scale_mode '
-        'FROM pieces p ${where.whereSql} '
-        'ORDER BY p.title COLLATE NOCASE ASC, p.id ASC',
-        where.args,
+      return await _db.transaction(
+        (txn) => queryPiecesInTxn(txn, query, _dialect),
       );
-      if (pieceRows.isEmpty) {
-        return const <Piece>[];
-      }
-      final pieceIds = pieceRows
-          .map((row) => row['id']! as String)
-          .toList(growable: false);
-      final variantsByPiece = await loadVariantsByPiece(_db, pieceIds);
-      return List<Piece>.unmodifiable(<Piece>[
-        for (final row in pieceRows)
-          pieceFromSqlRow(
-            row,
-            variantsByPiece[row['id']! as String] ?? const <ScoreVariant>[],
-          ),
-      ]);
     } on sqflite.DatabaseException catch (error) {
       throw CatalogStorageException('Failed to query catalog: $error');
+    }
+  }
+
+  @override
+  Future<int> countPieces() async {
+    try {
+      final rows = await _db.rawQuery('SELECT COUNT(*) AS cnt FROM pieces');
+      return sqflite.Sqflite.firstIntValue(rows) ?? 0;
+    } on sqflite.DatabaseException catch (error) {
+      throw CatalogStorageException('Failed to count pieces: $error');
     }
   }
 
@@ -111,12 +103,17 @@ final class SqliteCatalogRepository implements CatalogRepository {
   @override
   Future<Piece?> getPieceById(String pieceId) async {
     try {
-      final row = await findPieceRow(_db, pieceId);
-      if (row == null) {
-        return null;
-      }
-      final variants = await loadVariantsByPiece(_db, <String>[pieceId]);
-      return pieceFromSqlRow(row, variants[pieceId] ?? const <ScoreVariant>[]);
+      return await _db.transaction((txn) async {
+        final row = await findPieceRow(txn, pieceId);
+        if (row == null) {
+          return null;
+        }
+        final variants = await loadVariantsByPiece(txn, <String>[pieceId]);
+        return pieceFromSqlRow(
+          row,
+          variants[pieceId] ?? const <ScoreVariant>[],
+        );
+      });
     } on sqflite.DatabaseException catch (error) {
       throw CatalogStorageException('Failed to fetch piece $pieceId: $error');
     }

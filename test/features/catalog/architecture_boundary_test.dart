@@ -64,6 +64,34 @@ void main() {
       }
     });
 
+    test('lib/features/catalog/state/ imports zero data or ui files', () {
+      final stateDir = Directory('lib/features/catalog/state');
+      final importPattern = RegExp(
+        r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''',
+        multiLine: true,
+      );
+      final dartFiles = stateDir
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.dart'))
+          .toList(growable: false);
+      expect(dartFiles, isNotEmpty);
+
+      for (final file in dartFiles) {
+        final content = file.readAsStringSync();
+        for (final match in importPattern.allMatches(content)) {
+          final uri = match.group(1)!;
+          expect(
+            uri.contains('/features/catalog/data/') ||
+                uri.contains('/features/catalog/ui/') ||
+                uri.startsWith('package:material_ui/'),
+            isFalse,
+            reason: '${file.path} has forbidden directive "$uri".',
+          );
+        }
+      }
+    });
+
     test('pubspec.yaml bundles zero .mxl or .musicxml assets', () {
       final pubspec = File('pubspec.yaml').readAsStringSync();
       expect(pubspec.contains('.mxl'), isFalse);
