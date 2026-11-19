@@ -277,5 +277,66 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Measure 1 / 8'), findsOneWidget);
     });
+
+    testWidgets(
+      'keeps variant chips accessible in error state so user can switch back to valid variant',
+      (tester) async {
+        final store = InMemoryScoreFileStore();
+        await store.saveScoreBytes(
+          variantId: 'v_simple',
+          format: ScoreFormat.musicXml,
+          bytes: simpleBytes,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              scoreFileStoreProvider.overrideWithValue(store),
+              scoreParserProvider.overrideWithValue(
+                const MusicXmlScoreParser(),
+              ),
+            ],
+            child: MaterialApp(
+              home: PieceScoreScreen(piece: piece, initialVariant: vSimple),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Measure 1 / 8'), findsOneWidget);
+
+        // Select broken/missing variant -> error view appears, variant chips remain usable.
+        await tester.tap(
+          find.byKey(const ValueKey<String>('variant_chip_v_poly')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey<String>('score_error_view')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey<String>('variant_chip_v_simple')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey<String>('variant_chip_v_poly')),
+          findsOneWidget,
+        );
+
+        // Switch back to valid variant -> recovers back to rendered score.
+        await tester.tap(
+          find.byKey(const ValueKey<String>('variant_chip_v_simple')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey<String>('score_error_view')),
+          findsNothing,
+        );
+        expect(find.text('Measure 1 / 8'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey<String>('piece_score_viewport')),
+          findsOneWidget,
+        );
+      },
+    );
   });
 }

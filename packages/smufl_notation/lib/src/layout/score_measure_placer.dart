@@ -141,16 +141,13 @@ abstract final class ScoreMeasurePlacer {
                     sRight - 0.5,
                   ));
       rawSlices.add(
-        _placeSingleSlice(
-          p,
-          spec.system,
-          sLeft,
-          sRight,
-          centerX,
-          spec.sp,
+        _placeSingleSlice(p, spec.system, spec.sp, (
+          left: sLeft,
+          right: sRight,
+          centerX: centerX,
           trebleRestCenterX: centerTrebleWholeRest ? bodyCenterX : centerX,
           bassRestCenterX: centerBassWholeRest ? bodyCenterX : centerX,
-        ),
+        )),
       );
       sliceX = sRight;
     }
@@ -184,46 +181,49 @@ abstract final class ScoreMeasurePlacer {
   static SliceGeometry _placeSingleSlice(
     PreparedSlice p,
     SystemGeometry system,
-    double sLeft,
-    double sRight,
-    double centerX,
-    double sp, {
-    required double trebleRestCenterX,
-    required double bassRestCenterX,
-  }) {
+    double sp,
+    ({
+      double left,
+      double right,
+      double centerX,
+      double trebleRestCenterX,
+      double bassRestCenterX,
+    })
+    xBounds,
+  ) {
     return SliceGeometry(
       sliceIndex: p.slice.sliceIndex,
-      centerX: centerX,
+      centerX: xBounds.centerX,
       cursorRect: Rect.fromLTRB(
-        sLeft,
+        xBounds.left,
         system.trebleTopY,
-        math.max(sLeft + 1.0, sRight),
+        math.max(xBounds.left + 1.0, xBounds.right),
         system.bassBottomY,
       ),
       trebleChord: ScoreChordPlacer.placeChord(
         p.slice.trebleChord,
         p.trebleSolved,
         system,
-        centerX,
+        xBounds.centerX,
         sp,
       ),
       bassChord: ScoreChordPlacer.placeChord(
         p.slice.bassChord,
         p.bassSolved,
         system,
-        centerX,
+        xBounds.centerX,
         sp,
       ),
       trebleRest: ScoreChordPlacer.placeRest(
         p.slice.trebleRest,
         system,
-        trebleRestCenterX,
+        xBounds.trebleRestCenterX,
         sp,
       ),
       bassRest: ScoreChordPlacer.placeRest(
         p.slice.bassRest,
         system,
-        bassRestCenterX,
+        xBounds.bassRestCenterX,
         sp,
       ),
     );

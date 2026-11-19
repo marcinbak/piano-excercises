@@ -101,97 +101,120 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
             : null,
       ),
       body: SafeArea(
-        child: asyncScore.when(
-          loading: () => const Center(
-            child: CircularProgressIndicator(
-              key: ValueKey<String>('score_loading_indicator'),
-            ),
-          ),
-          error: (error, _) => _ScoreErrorView(
-            error: error,
-            onRetry: () =>
-                ref.invalidate(variantScoreProvider(_selectedVariant)),
-          ),
-          data: (score) => _buildLoadedBody(
+        child: LayoutBuilder(
+          builder: (context, constraints) => _buildScaffoldBody(
             context,
-            score: score,
+            asyncScore: asyncScore,
             safeSliceIndex: safeSliceIndex,
             isCompactHeight: isCompactHeight,
+            maxHeight: constraints.maxHeight,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildLoadedBody(
+  Widget _buildScaffoldBody(
     BuildContext context, {
+    required AsyncValue<Score> asyncScore,
+    required int safeSliceIndex,
+    required bool isCompactHeight,
+    required double maxHeight,
+  }) {
+    final loadedScore = asyncScore.value;
+    final hasVariants = widget.piece.variants.length > 1;
+    final showHeader = loadedScore != null || hasVariants;
+    final maxHeaderHeight = isCompactHeight
+        ? math.max(96.0, maxHeight * 0.42)
+        : math.max(120.0, maxHeight * 0.36);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (showHeader) ...<Widget>[
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeaderHeight),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                12,
+                isCompactHeight ? 4 : 8,
+                12,
+                isCompactHeight ? 4 : 8,
+              ),
+              child: PieceScoreHeaderBar(
+                piece: widget.piece,
+                selectedVariant: _selectedVariant,
+                onSelectVariant: _selectVariant,
+                handMode: _handMode,
+                onSelectHandMode: (mode) => setState(() => _handMode = mode),
+                cursor: loadedScore == null
+                    ? null
+                    : _buildCursorData(loadedScore, safeSliceIndex),
+              ),
+            ),
+          ),
+          const Divider(height: 1),
+        ],
+        Expanded(
+          child: asyncScore.when(
+            loading: () => const Center(
+              child: CircularProgressIndicator(
+                key: ValueKey<String>('score_loading_indicator'),
+              ),
+            ),
+            error: (error, _) => _ScoreErrorView(
+              error: error,
+              onRetry: () =>
+                  ref.invalidate(variantScoreProvider(_selectedVariant)),
+            ),
+            data: (score) => _buildLoadedViewport(
+              score: score,
+              safeSliceIndex: safeSliceIndex,
+              isCompactHeight: isCompactHeight,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  PieceScoreCursorBarData _buildCursorData(Score score, int safeSliceIndex) {
+    final sliceCount = score.slices.length;
+    final currentMeasure = sliceCount == 0
+        ? 0
+        : score.slices[safeSliceIndex].measureNumber;
+    return PieceScoreCursorBarData(
+      measureNumber: currentMeasure,
+      measureCount: score.measures.length,
+      canStepPrev: sliceCount > 0 && safeSliceIndex > 0,
+      canStepNext: sliceCount > 0 && safeSliceIndex < sliceCount - 1,
+      onPrevSlice: () => _selectSlice(score, safeSliceIndex - 1),
+      onNextSlice: () => _selectSlice(score, safeSliceIndex + 1),
+      onResetSlice: () => _selectSlice(score, 0),
+    );
+  }
+
+  Widget _buildLoadedViewport({
     required Score score,
     required int safeSliceIndex,
     required bool isCompactHeight,
   }) {
     final sliceCount = score.slices.length;
-    final currentMeasure = sliceCount == 0
-        ? 0
-        : score.slices[safeSliceIndex].measureNumber;
     final resolvedWrongNotes = <WrongNoteOverlay>[
       ...widget.wrongNoteOverlays,
       if (widget.wrongNoteOverlaysBuilder != null && sliceCount > 0)
         ...widget.wrongNoteOverlaysBuilder!(score, safeSliceIndex),
     ];
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxHeaderHeight = isCompactHeight
-            ? math.max(96.0, constraints.maxHeight * 0.42)
-            : math.max(120.0, constraints.maxHeight * 0.36);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxHeaderHeight),
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(
-                  12,
-                  isCompactHeight ? 4 : 8,
-                  12,
-                  isCompactHeight ? 4 : 8,
-                ),
-                child: PieceScoreHeaderBar(
-                  piece: widget.piece,
-                  selectedVariant: _selectedVariant,
-                  onSelectVariant: _selectVariant,
-                  handMode: _handMode,
-                  onSelectHandMode: (mode) => setState(() => _handMode = mode),
-                  cursor: PieceScoreCursorBarData(
-                    measureNumber: currentMeasure,
-                    measureCount: score.measures.length,
-                    canStepPrev: sliceCount > 0 && safeSliceIndex > 0,
-                    canStepNext:
-                        sliceCount > 0 && safeSliceIndex < sliceCount - 1,
-                    onPrevSlice: () => _selectSlice(score, safeSliceIndex - 1),
-                    onNextSlice: () => _selectSlice(score, safeSliceIndex + 1),
-                    onResetSlice: () => _selectSlice(score, 0),
-                  ),
-                ),
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.all(isCompactHeight ? 6 : 12),
-                child: PieceScoreViewport(
-                  score: score,
-                  activeSliceIndex: sliceCount == 0 ? null : safeSliceIndex,
-                  handMode: _handMode,
-                  wrongNoteOverlays: resolvedWrongNotes,
-                  onSliceTapped: (index) => _selectSlice(score, index),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+    return Padding(
+      padding: EdgeInsets.all(isCompactHeight ? 6 : 12),
+      child: PieceScoreViewport(
+        score: score,
+        activeSliceIndex: sliceCount == 0 ? null : safeSliceIndex,
+        handMode: _handMode,
+        wrongNoteOverlays: resolvedWrongNotes,
+        onSliceTapped: (index) => _selectSlice(score, index),
+      ),
     );
   }
 

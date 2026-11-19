@@ -32,7 +32,7 @@ class PieceScoreHeaderBar extends StatelessWidget {
     required this.onSelectVariant,
     required this.handMode,
     required this.onSelectHandMode,
-    required this.cursor,
+    this.cursor,
   });
 
   final Piece piece;
@@ -40,7 +40,7 @@ class PieceScoreHeaderBar extends StatelessWidget {
   final ValueChanged<ScoreVariant> onSelectVariant;
   final HandMode handMode;
   final ValueChanged<HandMode> onSelectHandMode;
-  final PieceScoreCursorBarData cursor;
+  final PieceScoreCursorBarData? cursor;
 
   @override
   Widget build(BuildContext context) {
@@ -81,29 +81,30 @@ class PieceScoreHeaderBar extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 6),
+          if (cursor != null) const SizedBox(height: 6),
         ],
-        Wrap(
-          spacing: 8,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: <Widget>[
-            for (final mode in HandMode.values)
-              ChoiceChip(
-                key: ValueKey<String>('hand_mode_${mode.name}'),
-                showCheckmark: false,
-                avatar: Icon(_iconForHand(mode), size: 16),
-                label: Text(mode.label),
-                selected: handMode == mode,
-                onSelected: (_) => onSelectHandMode(mode),
+        if (cursor != null)
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: <Widget>[
+              for (final mode in HandMode.values)
+                ChoiceChip(
+                  key: ValueKey<String>('hand_mode_${mode.name}'),
+                  showCheckmark: false,
+                  avatar: Icon(_iconForHand(mode), size: 16),
+                  label: Text(mode.label),
+                  selected: handMode == mode,
+                  onSelected: (_) => onSelectHandMode(mode),
+                ),
+              _MeasureBadge(
+                measureNumber: cursor!.measureNumber,
+                measureCount: cursor!.measureCount,
               ),
-            _MeasureBadge(
-              measureNumber: cursor.measureNumber,
-              measureCount: cursor.measureCount,
-            ),
-            _CursorStepRow(cursor: cursor),
-          ],
-        ),
+              _CursorStepRow(cursor: cursor!),
+            ],
+          ),
       ],
     );
   }
