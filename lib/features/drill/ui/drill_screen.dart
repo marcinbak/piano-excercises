@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/drill/state/drill_providers.dart';
@@ -9,39 +7,37 @@ import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/features/progression/progression.dart';
 
 /// Primary sight-reading drill screen displaying grand staff and BLE-MIDI feedback.
-class DrillScreen extends ConsumerWidget {
+class DrillScreen extends ConsumerStatefulWidget {
   const DrillScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DrillScreen> createState() => _DrillScreenState();
+}
+
+class _DrillScreenState extends ConsumerState<DrillScreen> {
+  bool _wasPausedBeforeMidi = false;
+
+  @override
+  Widget build(BuildContext context) {
     final sessionState = ref.watch(drillControllerProvider);
     final progression = ref.watch(progressionControllerProvider);
-    final connectedDevices = ref.watch(connectedMidiDevicesProvider);
-
-    final statusLabel = switch (connectedDevices.length) {
-      0 => 'Disconnected',
-      1 => 'Connected (${connectedDevices.first.name})',
-      final count => 'Connected ($count)',
-    };
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Sight-Reading Drill'),
         actions: <Widget>[
-          TextButton.icon(
-            key: const ValueKey<String>('midi-status-button'),
-            onPressed: () {
-              unawaited(_openMidiConnectionScreen(context, ref));
+          MidiStatusActionButton(
+            onBeforeOpen: () {
+              final drill = ref.read(drillControllerProvider.notifier);
+              _wasPausedBeforeMidi = drill.isPaused;
+              drill.setPaused(true);
             },
-            icon: Icon(
-              connectedDevices.isEmpty
-                  ? Icons.bluetooth_disabled
-                  : Icons.bluetooth_connected,
-            ),
-            label: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 160),
-              child: Text(statusLabel, overflow: TextOverflow.ellipsis),
-            ),
+            onAfterClose: () {
+              if (!mounted || _wasPausedBeforeMidi) {
+                return;
+              }
+              ref.read(drillControllerProvider.notifier).setPaused(false);
+            },
           ),
           IconButton(
             key: const ValueKey<String>('drill-reset-button'),
@@ -93,23 +89,5 @@ class DrillScreen extends ConsumerWidget {
         ),
       ),
     );
-  }
-
-  Future<void> _openMidiConnectionScreen(
-    BuildContext context,
-    WidgetRef ref,
-  ) async {
-    final drillController = ref.read(drillControllerProvider.notifier);
-    if (drillController.isPaused) {
-      return;
-    }
-    drillController.setPaused(true);
-    try {
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(builder: (_) => const MidiConnectionScreen()),
-      );
-    } finally {
-      drillController.setPaused(false);
-    }
   }
 }
