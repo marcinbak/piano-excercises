@@ -247,7 +247,7 @@ class _ScoreErrorView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       key: const ValueKey<String>('score_error_view'),
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,

@@ -338,5 +338,60 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'renders multi-variant error view with zero overflow at 800x360 @ 1.6x text scale',
+      (tester) async {
+        tester.view.physicalSize = const Size(800, 360);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final store = InMemoryScoreFileStore();
+        await store.saveScoreBytes(
+          variantId: 'v_simple',
+          format: ScoreFormat.musicXml,
+          bytes: simpleBytes,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              scoreFileStoreProvider.overrideWithValue(store),
+              scoreParserProvider.overrideWithValue(
+                const MusicXmlScoreParser(),
+              ),
+            ],
+            child: MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: const TextScaler.linear(1.6)),
+                child: child!,
+              ),
+              home: PieceScoreScreen(piece: piece, initialVariant: vPoly),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.takeException(), isNull);
+        expect(
+          find.byKey(const ValueKey<String>('score_error_view')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey<String>('score_retry_button')),
+          findsOneWidget,
+        );
+        await tester.ensureVisible(
+          find.byKey(const ValueKey<String>('score_retry_button')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey<String>('variant_chip_v_simple')),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('Measure 1 / 8'), findsOneWidget);
+      },
+    );
   });
 }
