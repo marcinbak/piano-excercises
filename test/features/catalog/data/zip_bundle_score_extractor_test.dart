@@ -223,6 +223,18 @@ void main() {
         throwsA(isA<ScoreParseException>()),
       );
 
+      final companionOver10MbPdf = _encodeZip(<String, Uint8List>{
+        'valid.mxl': simpleMxl,
+        'companion_booklet.pdf': Uint8List(15 * 1024 * 1024),
+      });
+      final companionSelection = await extractor.extractBundle(
+        companionOver10MbPdf,
+      );
+      expect(companionSelection.candidates, hasLength(1));
+      expect(companionSelection.candidates.single.fileName, 'valid.mxl');
+      expect(companionSelection.ignoredNonScoreCount, 1);
+      expect(companionSelection.failures, isEmpty);
+
       final nineMb = Uint8List(9 * 1024 * 1024);
       final over50MbCumulative = _encodeZip(<String, Uint8List>{
         'a.musicxml': nineMb,

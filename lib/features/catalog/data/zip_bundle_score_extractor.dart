@@ -48,7 +48,6 @@ final class ZipBundleScoreExtractor {
       bytes,
       directory.fileHeaders,
       maxUncompressedBytes: limits.maxBytes,
-      maxSingleEntryBytes: math.min(maxSingleScoreBytes, limits.maxBytes),
       onSizeLimitExceeded: onBudgetExceeded,
     );
 

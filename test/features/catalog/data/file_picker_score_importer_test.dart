@@ -349,4 +349,47 @@ void main() {
       throwsA(isA<ScoreParseException>()),
     );
   });
+
+  test('records >10 MB zip score entry as failure in multi-select without aborting valid siblings, while single >10 MB zip throws', () async {
+    final xmlBytes = File('test/fixtures/simplified_melody_bass.musicxml')
+        .readAsBytesSync();
+    final over10MbZip = _wrapBundleZip(<String, Uint8List>{
+      'huge.musicxml': Uint8List(10 * 1024 * 1024 + 1),
+    });
+
+    final multiImporter = FilePickerScoreImporter(
+      pickFiles: () async => <PlatformFile>[
+        _FakePlatformFile(
+          name: 'good.musicxml',
+          knownLength: xmlBytes.length,
+          chunks: <Uint8List>[xmlBytes],
+        ),
+        _FakePlatformFile(
+          name: 'bundle_with_11mb_score.zip',
+          knownLength: over10MbZip.length,
+          chunks: <Uint8List>[over10MbZip],
+        ),
+      ],
+    );
+    final selection = await multiImporter.pickAndParseScores();
+    expect(selection, isNotNull);
+    expect(selection!.candidates, hasLength(1));
+    expect(selection.candidates.single.fileName, 'good.musicxml');
+    expect(selection.failures, hasLength(1));
+    expect(selection.failures.single.sourceName, 'bundle_with_11mb_score.zip');
+
+    final singleOver10MbImporter = FilePickerScoreImporter(
+      pickFiles: () async => <PlatformFile>[
+        _FakePlatformFile(
+          name: 'only_huge.zip',
+          knownLength: over10MbZip.length,
+          chunks: <Uint8List>[over10MbZip],
+        ),
+      ],
+    );
+    await expectLater(
+      singleOver10MbImporter.pickAndParseScores,
+      throwsA(isA<ScoreParseException>()),
+    );
+  });
 }

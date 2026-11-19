@@ -179,12 +179,18 @@ abstract final class MxlEntryValidator {
       );
     }
     if (hComp > maxCompressedBytes ||
-        hUncomp > maxSingleUncompressedBytes ||
         fComp > maxCompressedBytes ||
-        fUncomp > maxSingleUncompressedBytes) {
+        hUncomp > maxCompressedBytes ||
+        fUncomp > maxCompressedBytes) {
       const msg = 'Invalid or oversized entry bounds in .mxl archive.';
       onSizeLimitExceeded?.call(msg);
       throw const ScoreParseException(msg);
+    }
+    if (hUncomp > maxSingleUncompressedBytes ||
+        fUncomp > maxSingleUncompressedBytes) {
+      throw const ScoreParseException(
+        'Invalid or oversized entry bounds in .mxl archive.',
+      );
     }
   }
 }
