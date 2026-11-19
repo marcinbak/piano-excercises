@@ -23,7 +23,7 @@ Author each arrangement (`DifficultyTier` `1..5`) in `MuseScore 4` with identica
 | Tier | Label | Arrangement Scope |
 |---|---|---|
 | `1` | `Beginner` | Single-line melody or landmark bass notes with sparse rhythms |
-| `2` | `Easy` | Simple two-hand patterns in narrow positions |
+| `2` | `Elementary` | Simple two-hand patterns in narrow positions |
 | `3` | `Intermediate` | Standard accompaniment patterns and simple chords |
 | `4` | `Advanced` | Multi-voice counterpoint and denser chords |
 | `5` | `Original` | Unabridged score faithful to the published edition |
