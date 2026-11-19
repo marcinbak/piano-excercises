@@ -6,22 +6,13 @@ import 'package:piano_exercises/features/catalog/domain/score_parser.dart';
 /// Bounds-checks raw ZIP EOCDR headers before `ZipDirectory.read` runs.
 abstract final class MxlEocdrValidator {
   /// Validates EOCDR signature, ZIP64 absence, and entry/directory bounds.
-  static void validate(
-    Uint8List bytes, {
-    required int maxEntries,
-    void Function(String message)? onEntryLimitExceeded,
-  }) {
+  static void validate(Uint8List bytes, {required int maxEntries}) {
     if (bytes.length < 22) {
       throw const ScoreParseException('Truncated .mxl ZIP archive.');
     }
     final eocdrPos = _findLastEocdrSignature(bytes);
     _rejectZip64Sentinels(bytes, eocdrPos);
-    _validateEntryAndDirectoryBounds(
-      bytes,
-      eocdrPos,
-      maxEntries: maxEntries,
-      onEntryLimitExceeded: onEntryLimitExceeded,
-    );
+    _validateEntryAndDirectoryBounds(bytes, eocdrPos, maxEntries: maxEntries);
   }
 
   static int _findLastEocdrSignature(Uint8List bytes) {
@@ -70,7 +61,6 @@ abstract final class MxlEocdrValidator {
     Uint8List bytes,
     int eocdrPos, {
     required int maxEntries,
-    void Function(String message)? onEntryLimitExceeded,
   }) {
     final diskNum = _readUint16Le(bytes, eocdrPos + 4);
     final cdStartDisk = _readUint16Le(bytes, eocdrPos + 6);
@@ -82,25 +72,16 @@ abstract final class MxlEocdrValidator {
     if (diskNum != 0 ||
         cdStartDisk != 0 ||
         totalEntries < 1 ||
+        totalEntries > maxEntries ||
         diskEntries != totalEntries) {
       throw ScoreParseException(
         'Archive entry count must be between 1 and $maxEntries.',
       );
     }
-    if (totalEntries > maxEntries) {
-      final msg = 'Archive entry count must be between 1 and $maxEntries.';
-      onEntryLimitExceeded?.call(msg);
-      throw ScoreParseException(msg);
-    }
-    if (cdOffset + cdSize > eocdrPos) {
+    if (cdSize > maxEntries * 1024 || cdOffset + cdSize > eocdrPos) {
       throw const ScoreParseException(
         'ZIP central directory size exceeds bounded archive limits.',
       );
-    }
-    if (cdSize > maxEntries * 1024) {
-      const msg = 'ZIP central directory size exceeds bounded archive limits.';
-      onEntryLimitExceeded?.call(msg);
-      throw const ScoreParseException(msg);
     }
   }
 

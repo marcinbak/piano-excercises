@@ -12,12 +12,9 @@ abstract final class MxlEntryValidator {
     Uint8List bytes,
     List<ZipFileHeader> headers, {
     required int maxUncompressedBytes,
-    int? maxSingleEntryBytes,
-    void Function(String message)? onSizeLimitExceeded,
   }) {
     final headersByPath = <String, ZipFileHeader>{};
     var cumulativeDeclaredUncompressed = 0;
-    final singleLimit = maxSingleEntryBytes ?? maxUncompressedBytes;
 
     for (final header in headers) {
       final file = header.file;
@@ -33,9 +30,7 @@ abstract final class MxlEntryValidator {
       _validateFlagsAndSizes(
         header,
         file,
-        maxCompressedBytes: maxUncompressedBytes,
-        maxSingleUncompressedBytes: singleLimit,
-        onSizeLimitExceeded: onSizeLimitExceeded,
+        maxUncompressedBytes: maxUncompressedBytes,
       );
       final declared = math.max(
         header.uncompressedSize!,
@@ -43,9 +38,9 @@ abstract final class MxlEntryValidator {
       );
       cumulativeDeclaredUncompressed += declared;
       if (cumulativeDeclaredUncompressed > maxUncompressedBytes) {
-        const msg = 'Archive declared uncompressed size exceeds limit.';
-        onSizeLimitExceeded?.call(msg);
-        throw const ScoreParseException(msg);
+        throw const ScoreParseException(
+          'Archive declared uncompressed size exceeds limit.',
+        );
       }
       headersByPath[header.filename] = header;
     }
@@ -135,9 +130,7 @@ abstract final class MxlEntryValidator {
   static void _validateFlagsAndSizes(
     ZipFileHeader header,
     ZipFile file, {
-    required int maxCompressedBytes,
-    required int maxSingleUncompressedBytes,
-    void Function(String message)? onSizeLimitExceeded,
+    required int maxUncompressedBytes,
   }) {
     final externalAttrs = header.externalFileAttributes ?? 0;
     if (((externalAttrs >> 16) & 0xF000) == 0xA000) {
@@ -172,22 +165,12 @@ abstract final class MxlEntryValidator {
         hUncomp < 0 ||
         fComp < 0 ||
         fUncomp < 0 ||
+        hComp > maxUncompressedBytes ||
+        hUncomp > maxUncompressedBytes ||
+        fComp > maxUncompressedBytes ||
+        fUncomp > maxUncompressedBytes ||
         raw == null ||
         raw.length != fComp) {
-      throw const ScoreParseException(
-        'Invalid or oversized entry bounds in .mxl archive.',
-      );
-    }
-    if (hComp > maxCompressedBytes ||
-        fComp > maxCompressedBytes ||
-        hUncomp > maxCompressedBytes ||
-        fUncomp > maxCompressedBytes) {
-      const msg = 'Invalid or oversized entry bounds in .mxl archive.';
-      onSizeLimitExceeded?.call(msg);
-      throw const ScoreParseException(msg);
-    }
-    if (hUncomp > maxSingleUncompressedBytes ||
-        fUncomp > maxSingleUncompressedBytes) {
       throw const ScoreParseException(
         'Invalid or oversized entry bounds in .mxl archive.',
       );

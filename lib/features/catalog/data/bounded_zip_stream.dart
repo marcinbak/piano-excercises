@@ -33,7 +33,6 @@ ZipDirectory readBoundedZipDirectory(
   Uint8List bytes, {
   required int maxArchiveBytes,
   required int maxEntries,
-  void Function(String message)? onEntryLimitExceeded,
 }) {
   if (bytes.length < 4 ||
       bytes.length > maxArchiveBytes ||
@@ -45,11 +44,7 @@ ZipDirectory readBoundedZipDirectory(
       'Input is not a valid bounded .mxl ZIP archive.',
     );
   }
-  MxlEocdrValidator.validate(
-    bytes,
-    maxEntries: maxEntries,
-    onEntryLimitExceeded: onEntryLimitExceeded,
-  );
+  MxlEocdrValidator.validate(bytes, maxEntries: maxEntries);
   final ZipDirectory directory;
   try {
     directory = ZipDirectory.read(InputStream(bytes));
@@ -59,16 +54,12 @@ ZipDirectory readBoundedZipDirectory(
     throw const ScoreParseException('Invalid ZIP archive structure.');
   }
   if (directory.fileHeaders.isEmpty ||
-      directory.totalCentralDirectoryEntries <= 0) {
+      directory.fileHeaders.length > maxEntries ||
+      directory.totalCentralDirectoryEntries <= 0 ||
+      directory.totalCentralDirectoryEntries > maxEntries) {
     throw ScoreParseException(
       'Archive entry count must be between 1 and $maxEntries.',
     );
-  }
-  if (directory.fileHeaders.length > maxEntries ||
-      directory.totalCentralDirectoryEntries > maxEntries) {
-    final msg = 'Archive entry count must be between 1 and $maxEntries.';
-    onEntryLimitExceeded?.call(msg);
-    throw ScoreParseException(msg);
   }
   return directory;
 }

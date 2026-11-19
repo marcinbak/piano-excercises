@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
@@ -59,7 +58,7 @@ final class FilePickerScoreImporter implements ScoreImportSource {
         final parsed = await _readAndParsePickedEntry(
           pickedFiles.single,
           remainingByteBudget: maxBundleBytes,
-          remainingEntryBudget: defaultMaxFiles,
+          remainingCandidateBudget: defaultMaxFiles,
         );
         return parsed.selection;
       } on _SelectionLimitExceededException catch (error) {
@@ -74,7 +73,7 @@ final class FilePickerScoreImporter implements ScoreImportSource {
   ) async {
     final state = _MultiSelectionAccumulator(
       remainingByteBudget: maxBundleBytes,
-      remainingEntryBudget: defaultMaxFiles,
+      remainingCandidateBudget: defaultMaxFiles,
     );
     for (var i = 0; i < pickedFiles.length; i += 1) {
       await _processMultiEntry(pickedFiles[i], state);
@@ -102,16 +101,11 @@ final class FilePickerScoreImporter implements ScoreImportSource {
     PlatformFile picked,
     _MultiSelectionAccumulator state,
   ) async {
-    if (state.remainingByteBudget <= 0 || state.remainingEntryBudget <= 0) {
-      throw ScoreParseException(
-        'Selected scores exceed the $maxBundleBytes byte / $defaultMaxFiles entry limit.',
-      );
-    }
     try {
       final parsed = await _readAndParsePickedEntry(
         picked,
         remainingByteBudget: state.remainingByteBudget,
-        remainingEntryBudget: state.remainingEntryBudget,
+        remainingCandidateBudget: state.remainingCandidateBudget,
       );
       state.recordSuccess(
         parsed,
@@ -121,7 +115,6 @@ final class FilePickerScoreImporter implements ScoreImportSource {
     } on _SelectionLimitExceededException catch (error) {
       throw ScoreParseException(error.message);
     } on ScoreParseException catch (error) {
-      state.remainingEntryBudget -= 1;
       state.firstParseError ??= error;
       state.failures.add(
         ScoreImportFailure(sourceName: picked.name, message: error.message),
@@ -132,19 +125,19 @@ final class FilePickerScoreImporter implements ScoreImportSource {
   Future<_ParsedPickedEntry> _readAndParsePickedEntry(
     PlatformFile picked, {
     required int remainingByteBudget,
-    required int remainingEntryBudget,
+    required int remainingCandidateBudget,
   }) async {
     final lowerName = picked.name.trim().toLowerCase();
     if (lowerName.endsWith('.zip')) {
       final bytes = await _readBoundedBytes(
         picked,
         perFileLimit: maxBundleBytes,
-        remainingSelectionBudget: remainingByteBudget,
+        remainingSelectionBudget: maxBundleBytes,
       );
       final selection = await _bundleExtractor.extractBundle(
         bytes,
         maxUncompressedBytes: remainingByteBudget,
-        maxArchiveEntries: remainingEntryBudget,
+        maxScoreCandidates: remainingCandidateBudget,
         onBudgetExceeded: (msg) => throw _SelectionLimitExceededException(msg),
       );
       var extractedBytes = 0;
@@ -153,12 +146,16 @@ final class FilePickerScoreImporter implements ScoreImportSource {
       }
       return _ParsedPickedEntry(
         selection: selection,
-        consumedBytes: math.max(bytes.length, extractedBytes),
-        consumedEntries: math.max(1, selection.candidates.length),
-        retainedCandidateBytes: extractedBytes,
+        consumedBytes: extractedBytes,
+        consumedCandidates: selection.candidates.length,
       );
     }
     _ensureScoreExtension(lowerName);
+    if (remainingCandidateBudget <= 0) {
+      throw const _SelectionLimitExceededException(
+        'Cannot import more than $defaultMaxFiles scores at once.',
+      );
+    }
     final bytes = await _readBoundedBytes(
       picked,
       perFileLimit: maxBytes,
@@ -174,8 +171,7 @@ final class FilePickerScoreImporter implements ScoreImportSource {
         ),
       ),
       consumedBytes: bytes.length,
-      consumedEntries: 1,
-      retainedCandidateBytes: bytes.length,
+      consumedCandidates: 1,
     );
   }
 
@@ -235,27 +231,25 @@ final class _ParsedPickedEntry {
   const _ParsedPickedEntry({
     required this.selection,
     required this.consumedBytes,
-    required this.consumedEntries,
-    required this.retainedCandidateBytes,
+    required this.consumedCandidates,
   });
 
   final ScoreImportSelection selection;
   final int consumedBytes;
-  final int consumedEntries;
-  final int retainedCandidateBytes;
+  final int consumedCandidates;
 }
 
 final class _MultiSelectionAccumulator {
   _MultiSelectionAccumulator({
     required this.remainingByteBudget,
-    required this.remainingEntryBudget,
+    required this.remainingCandidateBudget,
   });
 
   final List<ImportedScoreCandidate> candidates = <ImportedScoreCandidate>[];
   final List<ScoreImportFailure> failures = <ScoreImportFailure>[];
   int ignoredNonScoreCount = 0;
   int remainingByteBudget;
-  int remainingEntryBudget;
+  int remainingCandidateBudget;
   int totalRetainedCandidateBytes = 0;
   bool hasBundle = false;
   ScoreParseException? firstParseError;
@@ -266,8 +260,8 @@ final class _MultiSelectionAccumulator {
     required int maxCandidates,
   }) {
     remainingByteBudget -= parsed.consumedBytes;
-    remainingEntryBudget -= parsed.consumedEntries;
-    totalRetainedCandidateBytes += parsed.retainedCandidateBytes;
+    remainingCandidateBudget -= parsed.consumedCandidates;
+    totalRetainedCandidateBytes += parsed.consumedBytes;
     candidates.addAll(parsed.selection.candidates);
     failures.addAll(parsed.selection.failures);
     ignoredNonScoreCount += parsed.selection.ignoredNonScoreCount;

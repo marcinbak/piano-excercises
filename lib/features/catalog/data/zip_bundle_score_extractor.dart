@@ -30,25 +30,23 @@ final class ZipBundleScoreExtractor {
   Future<ScoreImportSelection> extractBundle(
     Uint8List bytes, {
     int? maxUncompressedBytes,
-    int? maxArchiveEntries,
+    int? maxScoreCandidates,
     void Function(String message)? onBudgetExceeded,
   }) async {
     final limits = _resolveEffectiveLimits(
       maxUncompressedBytes: maxUncompressedBytes,
-      maxArchiveEntries: maxArchiveEntries,
+      maxScoreCandidates: maxScoreCandidates,
       onBudgetExceeded: onBudgetExceeded,
     );
     final directory = readBoundedZipDirectory(
       bytes,
       maxArchiveBytes: maxTotalUncompressedBytes,
-      maxEntries: limits.maxEntries,
-      onEntryLimitExceeded: onBudgetExceeded,
+      maxEntries: maxEntries,
     );
     MxlEntryValidator.validateAllHeaders(
       bytes,
       directory.fileHeaders,
-      maxUncompressedBytes: limits.maxBytes,
-      onSizeLimitExceeded: onBudgetExceeded,
+      maxUncompressedBytes: maxTotalUncompressedBytes,
     );
 
     final budget = DecodeBudget(
@@ -60,12 +58,19 @@ final class ZipBundleScoreExtractor {
     final outcome = await _extractEntries(
       headers: directory.fileHeaders,
       budget: budget,
+      maxCandidates: limits.maxCandidates,
       candidates: candidates,
       failures: failures,
     );
     if (outcome.budgetExceeded) {
       onBudgetExceeded?.call(budget.errorMessage);
       throw ScoreParseException(budget.errorMessage);
+    }
+    if (outcome.candidateLimitExceeded) {
+      final msg =
+          'Cannot import more than ${limits.maxCandidates} scores at once.';
+      onBudgetExceeded?.call(msg);
+      throw ScoreParseException(msg);
     }
     if (candidates.isEmpty) {
       throw ScoreParseException(
@@ -82,69 +87,83 @@ final class ZipBundleScoreExtractor {
     );
   }
 
-  ({int maxBytes, int maxEntries}) _resolveEffectiveLimits({
+  ({int maxBytes, int maxCandidates}) _resolveEffectiveLimits({
     required int? maxUncompressedBytes,
-    required int? maxArchiveEntries,
+    required int? maxScoreCandidates,
     required void Function(String message)? onBudgetExceeded,
   }) {
     final effectiveMaxBytes = maxUncompressedBytes == null
         ? maxTotalUncompressedBytes
         : math.min(maxUncompressedBytes, maxTotalUncompressedBytes);
-    final effectiveMaxEntries = maxArchiveEntries == null
+    final effectiveMaxCandidates = maxScoreCandidates == null
         ? maxEntries
-        : math.min(maxArchiveEntries, maxEntries);
+        : math.min(maxScoreCandidates, maxEntries);
     if (effectiveMaxBytes <= 0) {
       const msg =
           'Decompressed .zip bundle content exceeds maximum uncompressed byte limit.';
       onBudgetExceeded?.call(msg);
       throw const ScoreParseException(msg);
     }
-    if (effectiveMaxEntries <= 0) {
-      final msg = 'Archive entry count must be between 1 and $maxEntries.';
+    if (effectiveMaxCandidates <= 0) {
+      final msg = 'Cannot import more than $maxEntries scores at once.';
       onBudgetExceeded?.call(msg);
       throw ScoreParseException(msg);
     }
-    return (maxBytes: effectiveMaxBytes, maxEntries: effectiveMaxEntries);
+    return (maxBytes: effectiveMaxBytes, maxCandidates: effectiveMaxCandidates);
   }
 
-  Future<({int ignoredNonScoreCount, bool budgetExceeded})> _extractEntries({
+  Future<
+    ({
+      int ignoredNonScoreCount,
+      bool budgetExceeded,
+      bool candidateLimitExceeded,
+    })
+  >
+  _extractEntries({
     required List<ZipFileHeader> headers,
     required DecodeBudget budget,
+    required int maxCandidates,
     required List<ImportedScoreCandidate> candidates,
     required List<ScoreImportFailure> failures,
   }) async {
     var ignoredNonScoreCount = 0;
     var parsedAttempts = 0;
     for (final header in headers) {
-      final path = header.filename;
-      if (path.endsWith('/') || _isIgnoredMetadataEntry(path)) {
+      final kind = _classifyEntry(header.filename);
+      if (kind == _BundleEntryKind.skip) {
         continue;
       }
-      final baseName = path.split('/').last;
-      final lowerBase = baseName.toLowerCase();
-      if (lowerBase.endsWith('.zip')) {
+      if (kind == _BundleEntryKind.nestedZip) {
         failures.add(
           ScoreImportFailure(
-            sourceName: path,
+            sourceName: header.filename,
             message: 'Nested .zip archives are not supported.',
           ),
         );
         continue;
       }
-      if (!lowerBase.endsWith('.mxl') && !lowerBase.endsWith('.musicxml')) {
+      if (kind == _BundleEntryKind.nonScore) {
         ignoredNonScoreCount += 1;
         continue;
       }
+      if (candidates.length >= maxCandidates) {
+        return (
+          ignoredNonScoreCount: ignoredNonScoreCount,
+          budgetExceeded: false,
+          candidateLimitExceeded: true,
+        );
+      }
       final result = _tryExtractScoreCandidate(
         header: header,
-        path: path,
-        baseName: baseName,
+        path: header.filename,
+        baseName: header.filename.split('/').last,
         budget: budget,
       );
       if (budget.exceeded) {
         return (
           ignoredNonScoreCount: ignoredNonScoreCount,
           budgetExceeded: true,
+          candidateLimitExceeded: false,
         );
       }
       if (result.candidate != null) {
@@ -157,7 +176,25 @@ final class ZipBundleScoreExtractor {
         await Future<void>.delayed(Duration.zero);
       }
     }
-    return (ignoredNonScoreCount: ignoredNonScoreCount, budgetExceeded: false);
+    return (
+      ignoredNonScoreCount: ignoredNonScoreCount,
+      budgetExceeded: false,
+      candidateLimitExceeded: false,
+    );
+  }
+
+  static _BundleEntryKind _classifyEntry(String path) {
+    if (path.endsWith('/') || _isIgnoredMetadataEntry(path)) {
+      return _BundleEntryKind.skip;
+    }
+    final lowerBase = path.split('/').last.toLowerCase();
+    if (lowerBase.endsWith('.zip')) {
+      return _BundleEntryKind.nestedZip;
+    }
+    if (!lowerBase.endsWith('.mxl') && !lowerBase.endsWith('.musicxml')) {
+      return _BundleEntryKind.nonScore;
+    }
+    return _BundleEntryKind.score;
   }
 
   ({ImportedScoreCandidate? candidate, ScoreImportFailure? failure})
@@ -235,3 +272,5 @@ final class ZipBundleScoreExtractor {
     return lowerBase == 'thumbs.db' || lowerBase == 'desktop.ini';
   }
 }
+
+enum _BundleEntryKind { skip, nestedZip, nonScore, score }

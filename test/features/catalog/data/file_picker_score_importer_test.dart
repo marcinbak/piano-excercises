@@ -392,4 +392,75 @@ void main() {
       throwsA(isA<ScoreParseException>()),
     );
   });
+
+  test('enforces tight remainingByteBudget independently of picked file order when ignoring companion files and rejected entries', () async {
+    final xmlBytes = File('test/fixtures/simplified_melody_bass.musicxml')
+        .readAsBytesSync();
+    final xmlText = utf8.decode(xmlBytes);
+
+    Uint8List padXml(int targetBytes) {
+      final padLen = targetBytes - xmlBytes.length - 10;
+      return Uint8List.fromList(
+        utf8.encode(
+          xmlText.replaceFirst(
+            '</score-partwise>',
+            '<!-- ${'x' * padLen} --></score-partwise>',
+          ),
+        ),
+      );
+    }
+
+    final validLargeBytes = padXml(40 * 1024);
+    final validMxlBytes = _wrapMxl(xmlBytes);
+    final companionPdfBytes = Uint8List.fromList(
+      List<int>.generate(15 * 1024, (i) => (i * 37 + 13) & 0xFF),
+    );
+    final pdfAndMxlZip = _wrapBundleZip(<String, Uint8List>{
+      'companion.pdf': companionPdfBytes,
+      'valid.mxl': validMxlBytes,
+    });
+    final oversizedScoreZip = _wrapBundleZip(<String, Uint8List>{
+      'oversized.musicxml': padXml(46 * 1024),
+    });
+
+    final validLargeFile = _FakePlatformFile(
+      name: 'valid_large.musicxml',
+      knownLength: validLargeBytes.length,
+      chunks: <Uint8List>[validLargeBytes],
+    );
+    final pdfAndMxlFile = _FakePlatformFile(
+      name: 'bundle_with_15kb_pdf_and_valid_mxl.zip',
+      knownLength: pdfAndMxlZip.length,
+      chunks: <Uint8List>[pdfAndMxlZip],
+    );
+    final oversizedFile = _FakePlatformFile(
+      name: 'bundle_with_oversized_single_score.zip',
+      knownLength: oversizedScoreZip.length,
+      chunks: <Uint8List>[oversizedScoreZip],
+    );
+
+    for (final order in <List<PlatformFile>>[
+      <PlatformFile>[validLargeFile, pdfAndMxlFile, oversizedFile],
+      <PlatformFile>[oversizedFile, pdfAndMxlFile, validLargeFile],
+    ]) {
+      final importer = FilePickerScoreImporter(
+        maxBytes: 45 * 1024,
+        maxBundleBytes: 50 * 1024,
+        pickFiles: () async => order,
+      );
+      final selection = await importer.pickAndParseScores();
+      expect(selection, isNotNull);
+      expect(selection!.candidates, hasLength(2));
+      expect(
+        selection.candidates.map((c) => c.fileName),
+        containsAll(<String>['valid_large.musicxml', 'valid.mxl']),
+      );
+      expect(selection.ignoredNonScoreCount, 1);
+      expect(selection.failures, hasLength(1));
+      expect(
+        selection.failures.single.sourceName,
+        'bundle_with_oversized_single_score.zip',
+      );
+    }
+  });
 }
