@@ -241,6 +241,23 @@ void main() {
         );
         expect(sameTrebleC4, equals(trebleC4));
         expect(sameTrebleC4.hashCode, equals(trebleC4.hashCode));
+
+        const cDoubleSharp4 = StaffNote(
+          note: DiatonicNote.c,
+          octave: 4,
+          clef: Clef.treble,
+          accidental: Accidental.doubleSharp,
+        );
+        const dDoubleFlat4 = StaffNote(
+          note: DiatonicNote.d,
+          octave: 4,
+          clef: Clef.treble,
+          accidental: Accidental.doubleFlat,
+        );
+        expect(cDoubleSharp4.pitchName, 'Cx4');
+        expect(dDoubleFlat4.pitchName, 'Dbb4');
+        expect(cDoubleSharp4.midiNote, const MidiNote(62));
+        expect(dDoubleFlat4.midiNote, const MidiNote(60));
       },
     );
 
@@ -253,6 +270,24 @@ void main() {
           accidental: Accidental.sharp,
         ).midiNote,
         const MidiNote(0),
+      );
+      expect(
+        StaffNote.validated(
+          note: DiatonicNote.f,
+          octave: 9,
+          clef: Clef.treble,
+          accidental: Accidental.doubleSharp,
+        ).midiNote,
+        const MidiNote(127),
+      );
+      expect(
+        () => StaffNote.validated(
+          note: DiatonicNote.c,
+          octave: -1,
+          clef: Clef.bass,
+          accidental: Accidental.doubleFlat,
+        ),
+        throwsRangeError,
       );
       expect(
         () => StaffNote.validated(
