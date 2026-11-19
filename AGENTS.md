@@ -47,6 +47,7 @@ One line per pitfall, grouped by area; full write-ups live in `docs/pitfalls/<ar
 - **BLE-MIDI:** Call `stopScanningForBluetoothDevices()` on Bluetooth power-off and timeout `waitUntilBluetoothIsInitialized()` — see [docs/pitfalls/ble-midi.md](docs/pitfalls/ble-midi.md).
 - **iOS:** Physical device deployment requires Xcode signing beyond `--no-codesign` and `--profile`/`--release` AOT builds for untethered launches — see [docs/pitfalls/ios.md](docs/pitfalls/ios.md).
 - **Riverpod:** Subscribe directly to `MidiRepository.noteEventsStream` in `Notifier.build()` and defer `state` updates in `dispose()` — see [docs/pitfalls/riverpod.md](docs/pitfalls/riverpod.md).
+- **Score Parser:** Bound `archive` ZIP decoding via raw EOCDR/local-header checks and `BoundedZipOutputStream`, override `XmlEntityMapping.decode` in `O(n)`, default omitted `<alter>` to `0`, and guard `activeAlterations` on `!tie.requiresAttack` — see [docs/pitfalls/score-parser.md](docs/pitfalls/score-parser.md).
 - **UI & SMuFL:** Align `Bravura` `TextPainter` glyphs via alphabetic baseline, call `dispose()`, set `ChoiceChip.showCheckmark: false`, use `widgets.dart` (`WidgetsApp`) in standalone packages, and clamp `visibleRect.top` on score shrink — see [docs/pitfalls/ui.md](docs/pitfalls/ui.md).
 
 ## Continuous documentation
