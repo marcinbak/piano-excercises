@@ -36,7 +36,7 @@ Stage pools live in [progression_stage.dart](../lib/features/progression/domain/
 ## 5. Open Decisions
 
 - **BLE-MIDI & Staff Packages:** Integrated `flutter_midi_command` + `flutter_midi_command_ble` in [MidiConnectionScreen](../lib/features/midi/ui/midi_connection_screen.dart) and bundled `Bravura` SMuFL rendering in [DrillScreen](../lib/features/drill/ui/drill_screen.dart); physical iOS BLE-MIDI discovery, connection, and real-time Note On/Off input are verified.
-- **Runtime `.mxl` Import (`D1`):** Load user-supplied `.mxl`/`.musicxml` scores at runtime and ship zero bundled scores in `pubspec.yaml` ([score-import.md](score-import.md)); `[M6]` added shared `Score` models and the hardened parser in [catalog.dart](../lib/features/catalog/catalog.dart).
+- **Runtime `.mxl` Import (`D1`):** Load user `.mxl`/`.musicxml` scores at runtime with zero bundled scores ([score-import.md](score-import.md)); `[M7]` added `SqliteCatalogRepository`, `AppDocsScoreStore`, and `CatalogScreen` in [catalog.dart](../lib/features/catalog/catalog.dart), deferring `Drill`/`Catalog` shell navigation to `[M9]`.
 - **SMuFL Engraving Engine (`D2`):** Verified `[M5]` spike in [smufl_notation.dart](../packages/smufl_notation/lib/smufl_notation.dart) (`Bravura` layout, `O(1)` cursor geometry, wrong-note overlays); `piece_practice` viewport integration planned in `[M8]`.
 - **Fallback Input:** Decide whether to include an on-screen piano or microphone pitch detection when no MIDI keyboard is connected.
 - **USB-MIDI:** Decide whether to support wired USB-MIDI alongside BLE-MIDI.
