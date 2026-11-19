@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
+import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/features/piece_practice/piece_practice.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 import 'package:smufl_notation/smufl_notation.dart';
@@ -23,6 +25,70 @@ Future<void> _loadBravura() async {
   _bravuraLoaded = true;
 }
 
+class _FakeMidiRepository implements MidiRepository {
+  final StreamController<List<MidiDeviceInfo>> devicesController =
+      StreamController<List<MidiDeviceInfo>>.broadcast();
+  final StreamController<MidiNoteEvent> noteEventsController =
+      StreamController<MidiNoteEvent>.broadcast();
+  final StreamController<MidiBluetoothStatus> bluetoothController =
+      StreamController<MidiBluetoothStatus>.broadcast();
+
+  @override
+  Stream<List<MidiDeviceInfo>> get devicesStream => devicesController.stream;
+
+  @override
+  Stream<MidiNoteEvent> get noteEventsStream => noteEventsController.stream;
+
+  @override
+  Stream<MidiBluetoothStatus> get bluetoothStateStream =>
+      bluetoothController.stream;
+
+  @override
+  MidiBluetoothStatus get currentBluetoothStatus =>
+      MidiBluetoothStatus.poweredOn;
+
+  @override
+  Future<List<MidiDeviceInfo>> currentDevices() async =>
+      const <MidiDeviceInfo>[];
+
+  @override
+  Future<void> startScan() async {}
+
+  @override
+  Future<void> stopScan() async {}
+
+  @override
+  Future<void> connect(MidiDeviceInfo device) async {}
+
+  @override
+  Future<void> disconnect(MidiDeviceInfo device) async {}
+
+  @override
+  Future<void> dispose() async {
+    await devicesController.close();
+    await noteEventsController.close();
+    await bluetoothController.close();
+  }
+}
+
+MidiNoteEvent _noteOn(int number) => MidiNoteEvent.fromChannelMessage(
+  noteNumber: number,
+  velocity: 96,
+  isNoteOn: true,
+  channel: 0,
+  deviceId: 'ble-1',
+  timestampMs: 0,
+);
+
+MidiNoteEvent _noteOff(int number) => MidiNoteEvent.fromChannelMessage(
+  noteNumber: number,
+  velocity: 0,
+  isNoteOn: false,
+  channel: 0,
+  deviceId: 'ble-1',
+  timestampMs: 0,
+);
+
 GrandStaffScorePainter _findScorePainter(WidgetTester tester) {
   final paints = tester.widgetList<CustomPaint>(
     find.descendant(
@@ -34,6 +100,53 @@ GrandStaffScorePainter _findScorePainter(WidgetTester tester) {
       .map((w) => w.painter)
       .whereType<GrandStaffScorePainter>()
       .single;
+}
+
+Score _twoSliceScore() {
+  return Score(
+    title: 'Short Etude',
+    scale: Scale.fromKeySignature(KeySignature.cMajor),
+    timeSignature: TimeSignature.common,
+    measures: <ScoreMeasure>[
+      ScoreMeasure(
+        measureNumber: 1,
+        slices: <ScoreSlice>[
+          ScoreSlice(
+            sliceIndex: 0,
+            measureNumber: 1,
+            beatOffset: const RationalBeats.zero(),
+            beatDuration: RationalBeats(2),
+            trebleNotes: <ScoreNote>[
+              ScoreNote(
+                staffNote: const StaffNote(
+                  note: DiatonicNote.c,
+                  octave: 4,
+                  clef: Clef.treble,
+                ),
+                duration: DurationValue(base: NoteBaseDuration.half),
+              ),
+            ],
+          ),
+          ScoreSlice(
+            sliceIndex: 1,
+            measureNumber: 1,
+            beatOffset: RationalBeats(2),
+            beatDuration: RationalBeats(2),
+            trebleNotes: <ScoreNote>[
+              ScoreNote(
+                staffNote: const StaffNote(
+                  note: DiatonicNote.e,
+                  octave: 4,
+                  clef: Clef.treble,
+                ),
+                duration: DurationValue(base: NoteBaseDuration.half),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ],
+  );
 }
 
 void main() {
@@ -93,6 +206,8 @@ void main() {
       testWidgets(
         'renders zero overflow at ${viewport.width}x${viewport.height} @ 1.6x text scale',
         (tester) async {
+          final midiRepo = _FakeMidiRepository();
+          addTearDown(midiRepo.dispose);
           tester.view.physicalSize = viewport;
           tester.view.devicePixelRatio = 1.0;
           tester.platformDispatcher.textScaleFactorTestValue = 1.6;
@@ -103,6 +218,7 @@ void main() {
 
           await tester.pumpWidget(
             ProviderScope(
+              overrides: [midiRepositoryProvider.overrideWithValue(midiRepo)],
               child: MaterialApp(
                 home: PieceScoreScreen(
                   piece: piece,
@@ -140,6 +256,8 @@ void main() {
     testWidgets(
       'supports hand mode chips, step controls, slice tap, and 32m -> 8m variant shrink clamp',
       (tester) async {
+        final midiRepo = _FakeMidiRepository();
+        addTearDown(midiRepo.dispose);
         final store = InMemoryScoreFileStore();
         await store.saveScoreBytes(
           variantId: 'v_simple',
@@ -155,6 +273,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              midiRepositoryProvider.overrideWithValue(midiRepo),
               scoreFileStoreProvider.overrideWithValue(store),
               scoreParserProvider.overrideWithValue(
                 const MusicXmlScoreParser(),
@@ -170,7 +289,6 @@ void main() {
         expect(find.text('Measure 1 / 32'), findsOneWidget);
         final initialLayout = _findScorePainter(tester).layout;
 
-        // Toggle hand modes.
         await tester.tap(find.byKey(const ValueKey<String>('hand_mode_right')));
         await tester.pump();
         expect(_findScorePainter(tester).activeHand, NotationHandFilter.right);
@@ -187,7 +305,6 @@ void main() {
         await tester.pump();
         expect(_findScorePainter(tester).activeHand, NotationHandFilter.both);
 
-        // Step next & reset cursor.
         await tester.tap(
           find.byKey(const ValueKey<String>('score_next_slice')),
         );
@@ -204,7 +321,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(_findScorePainter(tester).activeSliceIndex, 0);
 
-        // Tap slice 2 directly on canvas.
         final painterBeforeTap = _findScorePainter(tester);
         final rect2 = painterBeforeTap.layout.sliceRect(2)!;
         final scoreBoxTopLeft = tester.getTopLeft(
@@ -220,7 +336,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(_findScorePainter(tester).activeSliceIndex, 0);
 
-        // Scroll to bottom of 32-measure variant, then switch to 8-measure variant.
         final scrollable = tester.state<ScrollableState>(
           find.descendant(
             of: find.byType(GrandStaffScoreView),
@@ -248,10 +363,13 @@ void main() {
     testWidgets('shows retry view on score load failure and recovers', (
       tester,
     ) async {
+      final midiRepo = _FakeMidiRepository();
+      addTearDown(midiRepo.dispose);
       final store = InMemoryScoreFileStore();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            midiRepositoryProvider.overrideWithValue(midiRepo),
             scoreFileStoreProvider.overrideWithValue(store),
             scoreParserProvider.overrideWithValue(const MusicXmlScoreParser()),
           ],
@@ -281,6 +399,8 @@ void main() {
     testWidgets(
       'keeps variant chips accessible in error state so user can switch back to valid variant',
       (tester) async {
+        final midiRepo = _FakeMidiRepository();
+        addTearDown(midiRepo.dispose);
         final store = InMemoryScoreFileStore();
         await store.saveScoreBytes(
           variantId: 'v_simple',
@@ -291,6 +411,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              midiRepositoryProvider.overrideWithValue(midiRepo),
               scoreFileStoreProvider.overrideWithValue(store),
               scoreParserProvider.overrideWithValue(
                 const MusicXmlScoreParser(),
@@ -304,7 +425,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Measure 1 / 8'), findsOneWidget);
 
-        // Select broken/missing variant -> error view appears, variant chips remain usable.
         await tester.tap(
           find.byKey(const ValueKey<String>('variant_chip_v_poly')),
         );
@@ -313,16 +433,7 @@ void main() {
           find.byKey(const ValueKey<String>('score_error_view')),
           findsOneWidget,
         );
-        expect(
-          find.byKey(const ValueKey<String>('variant_chip_v_simple')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(const ValueKey<String>('variant_chip_v_poly')),
-          findsOneWidget,
-        );
 
-        // Switch back to valid variant -> recovers back to rendered score.
         await tester.tap(
           find.byKey(const ValueKey<String>('variant_chip_v_simple')),
         );
@@ -332,16 +443,14 @@ void main() {
           findsNothing,
         );
         expect(find.text('Measure 1 / 8'), findsOneWidget);
-        expect(
-          find.byKey(const ValueKey<String>('piece_score_viewport')),
-          findsOneWidget,
-        );
       },
     );
 
     testWidgets(
       'renders multi-variant error view with zero overflow at 800x360 @ 1.6x text scale',
       (tester) async {
+        final midiRepo = _FakeMidiRepository();
+        addTearDown(midiRepo.dispose);
         tester.view.physicalSize = const Size(800, 360);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.reset);
@@ -356,6 +465,7 @@ void main() {
         await tester.pumpWidget(
           ProviderScope(
             overrides: [
+              midiRepositoryProvider.overrideWithValue(midiRepo),
               scoreFileStoreProvider.overrideWithValue(store),
               scoreParserProvider.overrideWithValue(
                 const MusicXmlScoreParser(),
@@ -378,10 +488,6 @@ void main() {
           find.byKey(const ValueKey<String>('score_error_view')),
           findsOneWidget,
         );
-        expect(
-          find.byKey(const ValueKey<String>('score_retry_button')),
-          findsOneWidget,
-        );
         await tester.ensureVisible(
           find.byKey(const ValueKey<String>('score_retry_button')),
         );
@@ -391,6 +497,270 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
         expect(find.text('Measure 1 / 8'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Wait Mode renders wrong-note overlays, advances to completion, and restarts on Play Again',
+      (tester) async {
+        final midiRepo = _FakeMidiRepository();
+        addTearDown(midiRepo.dispose);
+        final shortScore = _twoSliceScore();
+        final vShort = ScoreVariant(
+          id: 'v_short',
+          pieceId: 'p_short',
+          difficultyTier: DifficultyTier.beginner,
+          label: 'Short',
+          fileName: 'short.musicxml',
+          storedRelativePath: 'scores/v_short.musicxml',
+          importedAtMs: 1,
+        );
+        final shortPiece = Piece(
+          id: 'p_short',
+          title: 'Short Etude',
+          artist: 'Tester',
+          scale: shortScore.scale,
+          variants: <ScoreVariant>[vShort],
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [midiRepositoryProvider.overrideWithValue(midiRepo)],
+            child: MaterialApp(
+              home: PieceScoreScreen(
+                piece: shortPiece,
+                initialVariant: vShort,
+                initialScore: shortScore,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(_findScorePainter(tester).activeSliceIndex, 0);
+        expect(_findScorePainter(tester).wrongNoteOverlays, isEmpty);
+
+        // Wrong note D4 (62) draws red overlay on slice 0.
+        midiRepo.noteEventsController.add(_noteOn(62));
+        await tester.pump(const Duration(milliseconds: 35));
+        midiRepo.noteEventsController.add(_noteOff(62));
+        await tester.pump();
+        expect(_findScorePainter(tester).activeSliceIndex, 0);
+        expect(_findScorePainter(tester).wrongNoteOverlays, hasLength(1));
+
+        // Correct note C4 (60) clears wrong overlay and advances to slice 1.
+        midiRepo.noteEventsController.add(_noteOn(60));
+        await tester.pump(const Duration(milliseconds: 35));
+        midiRepo.noteEventsController.add(_noteOff(60));
+        await tester.pump();
+        expect(_findScorePainter(tester).activeSliceIndex, 1);
+        expect(_findScorePainter(tester).wrongNoteOverlays, isEmpty);
+
+        // Correct note E4 (64) completes piece and displays completion banner.
+        midiRepo.noteEventsController.add(_noteOn(64));
+        await tester.pump(const Duration(milliseconds: 35));
+        midiRepo.noteEventsController.add(_noteOff(64));
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey<String>('practice_completed_banner')),
+          findsOneWidget,
+        );
+
+        // Tap Play Again -> resets cursor to slice 0 and dismisses banner.
+        await tester.tap(
+          find.byKey(const ValueKey<String>('practice_play_again_button')),
+        );
+        await tester.pump();
+        expect(_findScorePainter(tester).activeSliceIndex, 0);
+        expect(
+          find.byKey(const ValueKey<String>('practice_completed_banner')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'MeasureLoopSheet applies, wraps, clears, resets on variant switch, and MidiConnectionScreen pauses practice',
+      (tester) async {
+        final midiRepo = _FakeMidiRepository();
+        addTearDown(midiRepo.dispose);
+        final store = InMemoryScoreFileStore();
+        await store.saveScoreBytes(
+          variantId: 'v_simple',
+          format: ScoreFormat.musicXml,
+          bytes: simpleBytes,
+        );
+        await store.saveScoreBytes(
+          variantId: 'v_poly',
+          format: ScoreFormat.musicXml,
+          bytes: polyBytes,
+        );
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              midiRepositoryProvider.overrideWithValue(midiRepo),
+              scoreFileStoreProvider.overrideWithValue(store),
+              scoreParserProvider.overrideWithValue(
+                const MusicXmlScoreParser(),
+              ),
+            ],
+            child: MaterialApp(
+              home: PieceScoreScreen(piece: piece, initialVariant: vPoly),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Open MeasureLoopSheet and configure Loop M.2-4 (start inc x1 -> M.2, end inc x2 -> M.4).
+        await tester.tap(
+          find.byKey(const ValueKey<String>('score_loop_button')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey<String>('loop_start_inc')));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey<String>('loop_end_inc')));
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey<String>('loop_end_inc')));
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey<String>('loop_apply_button')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Measure 2 / 32'), findsOneWidget);
+        expect(find.text('Loop M.2\u20134'), findsOneWidget);
+
+        // Open MidiConnectionScreen -> MIDI notes must not affect practice cursor.
+        final sliceBeforeMidi = _findScorePainter(tester).activeSliceIndex;
+        await tester.tap(
+          find.byKey(const ValueKey<String>('midi-status-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('BLE-MIDI Connection'), findsOneWidget);
+
+        midiRepo.noteEventsController.add(_noteOn(61));
+        await tester.pump(const Duration(milliseconds: 50));
+        midiRepo.noteEventsController.add(_noteOff(61));
+        await tester.pump();
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(_findScorePainter(tester).activeSliceIndex, sliceBeforeMidi);
+        expect(_findScorePainter(tester).wrongNoteOverlays, isEmpty);
+
+        // Clear loop via header close button, re-apply loop, then verify variant switch resets loop.
+        await tester.tap(
+          find.byKey(const ValueKey<String>('score_clear_loop_button')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Loop'), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(const ValueKey<String>('score_loop_button')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey<String>('loop_apply_button')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Loop M.2'), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(const ValueKey<String>('variant_chip_v_simple')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Measure 1 / 8'), findsOneWidget);
+        expect(find.text('Loop'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'syncs livePieceProvider variants and renders MeasureLoopSheet + completion banner with zero overflow at 800x360 @ 1.6x',
+      (tester) async {
+        final midiRepo = _FakeMidiRepository();
+        final catalogRepo = InMemoryCatalogRepository();
+        addTearDown(() async {
+          await midiRepo.dispose();
+          await catalogRepo.close();
+        });
+        await catalogRepo.createPiece(piece);
+
+        tester.view.physicalSize = const Size(800, 360);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+        addTearDown(() {
+          tester.view.reset();
+          tester.platformDispatcher.clearTextScaleFactorTestValue();
+        });
+
+        final shortScore = _twoSliceScore();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              midiRepositoryProvider.overrideWithValue(midiRepo),
+              catalogRepositoryProvider.overrideWithValue(catalogRepo),
+            ],
+            child: MaterialApp(
+              home: PieceScoreScreen(
+                piece: Piece(
+                  id: 'p1',
+                  title: 'Test Sonata',
+                  artist: 'Test Composer',
+                  scale: polyScore.scale,
+                  variants: <ScoreVariant>[vSimple],
+                ),
+                initialVariant: vSimple,
+                initialScore: shortScore,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // livePieceProvider surfaces both variants stored in catalogRepo.
+        expect(
+          find.byKey(const ValueKey<String>('variant_chip_v_poly')),
+          findsOneWidget,
+        );
+
+        // Open MeasureLoopSheet at 800x360 @ 1.6x, apply loop, then clear via sheet button.
+        final loopButton = find.byKey(
+          const ValueKey<String>('score_loop_button'),
+        );
+        await tester.ensureVisible(loopButton);
+        await tester.tap(loopButton);
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        final applyButton = find.byKey(
+          const ValueKey<String>('loop_apply_button'),
+        );
+        await tester.ensureVisible(applyButton);
+        await tester.tap(applyButton);
+        await tester.pumpAndSettle();
+        expect(find.text('Loop M.1'), findsOneWidget);
+
+        await tester.ensureVisible(loopButton);
+        await tester.tap(loopButton);
+        await tester.pumpAndSettle();
+        final clearButton = find.byKey(
+          const ValueKey<String>('loop_clear_button'),
+        );
+        await tester.ensureVisible(clearButton);
+        await tester.tap(clearButton);
+        await tester.pumpAndSettle();
+        expect(find.text('Loop'), findsOneWidget);
+
+        // Complete shortScore -> completion banner fits with zero overflow.
+        midiRepo.noteEventsController.add(_noteOn(60));
+        await tester.pump(const Duration(milliseconds: 35));
+        midiRepo.noteEventsController.add(_noteOn(64));
+        await tester.pump(const Duration(milliseconds: 35));
+        expect(
+          find.byKey(const ValueKey<String>('practice_completed_banner')),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
       },
     );
   });

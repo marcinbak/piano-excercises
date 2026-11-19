@@ -12,9 +12,14 @@ import 'package:piano_exercises/features/catalog/ui/score_import_sheet.dart';
 
 /// Displays the searchable piece catalog and runtime `.mxl`/`.musicxml` importer.
 class CatalogScreen extends ConsumerStatefulWidget {
-  const CatalogScreen({super.key, this.onSelectVariant});
+  const CatalogScreen({
+    super.key,
+    this.onSelectVariant,
+    this.appBarActions = const <Widget>[],
+  });
 
   final void Function(Piece piece, ScoreVariant variant)? onSelectVariant;
+  final List<Widget> appBarActions;
 
   @override
   ConsumerState<CatalogScreen> createState() => _CatalogScreenState();
@@ -35,6 +40,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
       appBar: AppBar(
         title: const Text('Piece Catalog'),
         actions: <Widget>[
+          ...widget.appBarActions,
           IconButton(
             key: const ValueKey<String>('catalog-import-button'),
             tooltip: 'Import score',
@@ -81,18 +87,20 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
     return catalogAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text('Could not load piece catalog: $error'),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: () => unawaited(
-                ref.read(catalogControllerProvider.notifier).refresh(),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text('Could not load piece catalog: $error'),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => unawaited(
+                  ref.read(catalogControllerProvider.notifier).refresh(),
+                ),
+                child: const Text('Retry'),
               ),
-              child: const Text('Retry'),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
       data: (snapshot) {

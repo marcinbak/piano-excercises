@@ -53,21 +53,23 @@ class CatalogEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       key: const ValueKey<String>('catalog-empty-state'),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          const Text(
-            'No pieces in your catalog yet.\nImport a .mxl or .musicxml score.',
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            key: const ValueKey<String>('catalog-empty-import-button'),
-            onPressed: onImport,
-            icon: const Icon(Icons.file_upload_outlined),
-            label: const Text('Import Score'),
-          ),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Text(
+              'No pieces in your catalog yet.\nImport a .mxl or .musicxml score.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              key: const ValueKey<String>('catalog-empty-import-button'),
+              onPressed: onImport,
+              icon: const Icon(Icons.file_upload_outlined),
+              label: const Text('Import Score'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -83,17 +85,19 @@ class CatalogNoMatchesState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       key: const ValueKey<String>('catalog-no-matches-state'),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          const Text('No pieces match your current search or filters.'),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            key: const ValueKey<String>('catalog-clear-filters-button'),
-            onPressed: onClearFilters,
-            child: const Text('Clear Filters'),
-          ),
-        ],
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Text('No pieces match your current search or filters.'),
+            const SizedBox(height: 12),
+            OutlinedButton(
+              key: const ValueKey<String>('catalog-clear-filters-button'),
+              onPressed: onClearFilters,
+              child: const Text('Clear Filters'),
+            ),
+          ],
+        ),
       ),
     );
   }
