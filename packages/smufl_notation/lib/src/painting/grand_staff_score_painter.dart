@@ -1,11 +1,14 @@
 import 'package:flutter/rendering.dart';
-import 'package:smufl_notation/src/notation_model.dart';
-import 'package:smufl_notation/src/score_layout_types.dart';
-import 'package:smufl_notation/src/score_painter_chord_renderer.dart';
-import 'package:smufl_notation/src/score_painter_ornaments.dart';
-import 'package:smufl_notation/src/score_staff_backdrop_painter.dart';
-import 'package:smufl_notation/src/score_wrong_note_painter.dart';
-import 'package:smufl_notation/src/smufl_glyphs.dart';
+
+import 'package:smufl_notation/src/layout/score_layout_geometry.dart';
+import 'package:smufl_notation/src/layout/score_layout_types.dart';
+import 'package:smufl_notation/src/model/notation_model.dart';
+import 'package:smufl_notation/src/model/notation_score_model.dart';
+import 'package:smufl_notation/src/painting/score_painter_chord_renderer.dart';
+import 'package:smufl_notation/src/painting/score_painter_ornaments.dart';
+import 'package:smufl_notation/src/painting/score_staff_backdrop_painter.dart';
+import 'package:smufl_notation/src/painting/score_wrong_note_painter.dart';
+import 'package:smufl_notation/src/painting/smufl_glyph_painter.dart';
 
 /// Viewport-culled `CustomPainter` rendering an [EngravedScoreLayout].
 class GrandStaffScorePainter extends CustomPainter {

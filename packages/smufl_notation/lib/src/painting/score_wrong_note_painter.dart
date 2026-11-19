@@ -1,11 +1,14 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:smufl_notation/src/chord_collision_solver.dart';
-import 'package:smufl_notation/src/notation_model.dart';
-import 'package:smufl_notation/src/score_layout_engine.dart';
-import 'package:smufl_notation/src/score_layout_types.dart';
-import 'package:smufl_notation/src/smufl_glyphs.dart';
+import 'package:smufl_notation/src/glyphs/smufl_glyphs.dart';
+import 'package:smufl_notation/src/layout/chord_collision_solver.dart';
+import 'package:smufl_notation/src/layout/score_layout_engine.dart';
+import 'package:smufl_notation/src/layout/score_layout_geometry.dart';
+import 'package:smufl_notation/src/layout/score_layout_types.dart';
+import 'package:smufl_notation/src/model/notation_model.dart';
+import 'package:smufl_notation/src/model/notation_score_model.dart';
+import 'package:smufl_notation/src/painting/smufl_glyph_painter.dart';
 
 /// Resolved coordinates for one wrong-note glyph, its ledger lines, and accidental.
 final class PlacedWrongNoteSpec {

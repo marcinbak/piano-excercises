@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smufl_notation/smufl_notation.dart';
 
-import '../example/spike_fixtures.dart';
+import '../../example/spike_fixtures.dart';
 
 NotationChord _chord(
   SmuflClef clef,

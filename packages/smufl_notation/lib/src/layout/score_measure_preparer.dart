@@ -1,9 +1,10 @@
 import 'dart:math' as math;
 
-import 'package:smufl_notation/src/chord_collision_solver.dart';
-import 'package:smufl_notation/src/notation_model.dart';
-import 'package:smufl_notation/src/score_beam_solver.dart';
-import 'package:smufl_notation/src/smufl_glyphs.dart';
+import 'package:smufl_notation/src/glyphs/smufl_glyphs.dart';
+import 'package:smufl_notation/src/layout/chord_collision_solver.dart';
+import 'package:smufl_notation/src/layout/score_beam_solver.dart';
+import 'package:smufl_notation/src/model/notation_model.dart';
+import 'package:smufl_notation/src/model/notation_score_model.dart';
 
 /// Pre-solved slice spacing metadata before horizontal justification.
 final class PreparedSlice {

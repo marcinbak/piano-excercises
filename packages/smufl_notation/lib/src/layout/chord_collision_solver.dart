@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:smufl_notation/src/notation_model.dart';
-import 'package:smufl_notation/src/smufl_glyphs.dart';
+import 'package:smufl_notation/src/glyphs/smufl_glyphs.dart';
+import 'package:smufl_notation/src/model/notation_model.dart';
 
 /// Solved per-note horizontal shift and accidental column (`0..2`).
 final class SolvedNotePlacement {

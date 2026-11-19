@@ -1,10 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
-import 'package:smufl_notation/src/grand_staff_score_painter.dart';
-import 'package:smufl_notation/src/notation_model.dart';
-import 'package:smufl_notation/src/score_layout_engine.dart';
-import 'package:smufl_notation/src/score_layout_types.dart';
+
+import 'package:smufl_notation/src/layout/score_layout_engine.dart';
+import 'package:smufl_notation/src/layout/score_layout_geometry.dart';
+import 'package:smufl_notation/src/layout/score_layout_types.dart';
+import 'package:smufl_notation/src/model/notation_model.dart';
+import 'package:smufl_notation/src/model/notation_score_model.dart';
+import 'package:smufl_notation/src/painting/grand_staff_score_painter.dart';
 
 /// Scrollable, responsive SMuFL grand-staff score widget with cached layout.
 class GrandStaffScoreView extends StatefulWidget {

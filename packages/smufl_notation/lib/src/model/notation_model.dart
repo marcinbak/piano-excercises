@@ -1,6 +1,4 @@
-import 'package:smufl_notation/src/smufl_glyphs.dart';
-
-export 'package:smufl_notation/src/notation_score_model.dart';
+import 'package:smufl_notation/src/glyphs/smufl_glyphs.dart';
 
 /// Staff clef within a piano grand staff.
 enum SmuflClef {

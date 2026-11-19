@@ -1,5 +1,6 @@
-import 'package:flutter/painting.dart';
-import 'package:smufl_notation/src/notation_model.dart';
+import 'dart:ui';
+
+import 'package:smufl_notation/src/model/notation_model.dart';
 
 /// Visual styling and spacing metrics for engraving and painting a grand staff.
 final class ScoreStyle {
@@ -28,15 +29,6 @@ final class ScoreStyle {
   final String? fontPackage;
 
   double get fontSize => staffSpace * 4.0;
-
-  /// Builds a SMuFL `TextStyle` sized to [fontSize] with [color].
-  TextStyle glyphStyle(Color color) => TextStyle(
-    fontFamily: fontFamily,
-    package: fontPackage,
-    fontSize: fontSize,
-    height: 1.0,
-    color: color,
-  );
 
   /// Returns a copy with overridden visual properties.
   ScoreStyle copyWith({double? staffSpace}) {

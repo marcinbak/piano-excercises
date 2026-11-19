@@ -3,11 +3,11 @@ import 'dart:ui' as ui;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smufl_notation/smufl_notation.dart';
-import 'package:smufl_notation/src/score_wrong_note_painter.dart';
+import 'package:smufl_notation/src/painting/score_wrong_note_painter.dart';
 
-import '../example/main.dart';
-import '../example/spike_fixtures.dart';
-import 'test_font_loader.dart';
+import '../../example/main.dart';
+import '../../example/spike_fixtures.dart';
+import '../test_font_loader.dart';
 
 void main() {
   setUpAll(loadBravuraTestFont);

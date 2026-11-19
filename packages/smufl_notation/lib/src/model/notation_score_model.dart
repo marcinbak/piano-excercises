@@ -1,4 +1,4 @@
-import 'package:smufl_notation/src/notation_model.dart';
+import 'package:smufl_notation/src/model/notation_model.dart';
 
 /// Simultaneous rhythmic event across treble and bass staves.
 final class NotationSlice {

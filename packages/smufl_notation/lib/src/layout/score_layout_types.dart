@@ -1,9 +1,7 @@
 import 'dart:ui';
 
-import 'package:smufl_notation/src/notation_model.dart';
-import 'package:smufl_notation/src/score_layout_geometry.dart';
-
-export 'package:smufl_notation/src/score_layout_geometry.dart';
+import 'package:smufl_notation/src/layout/score_layout_geometry.dart';
+import 'package:smufl_notation/src/model/notation_model.dart';
 
 /// Vertical/horizontal coordinates for one rhythmic slice within a measure.
 final class SliceGeometry {
