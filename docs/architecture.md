@@ -59,7 +59,7 @@ Files allowed over budget today with a refactor ticket. This list only shrinks.
 - **Riverpod without codegen:** Use `flutter_riverpod` with manual providers in `state/` and overrides in `app/`; omit `riverpod_generator` and `build_runner` to keep builds fast.
 - **Dart barrel convention:** Public APIs use `<feature>.dart` instead of `index.ts`.
 - **No Flutter stack appendix:** `scripts/hotspots.py --check` enforces file-line budgets; `analysis_options.yaml` enforces strict types and lints.
-- **Pure-Flutter SMuFL engraving (`packages/smufl_notation`):** Chose pure-Dart layout + `CustomPainter` over `Verovio` C++ FFI to avoid `LGPL-3.0` iOS static-linking conflict, `+7 MB/ABI` binary bloat (`0 KB` added by reusing `Bravura.otf`), and SVG re-parse latency (`<2ms` layout), while enabling `O(1)` `SliceGeometry.cursorRect` and wrong-note overlay painting.
+- **Pure-Flutter SMuFL engraving (`packages/smufl_notation`):** Chose pure-Dart layout + `CustomPainter` over `Verovio` C++ FFI to avoid `LGPL-3.0` static linking and binary bloat (`+132 B` APK delta, `17.9 MB` CocoaPods-free iOS SPM build, `1.3ms` UI / `1.5ms` Raster p95 on 32-measure polyphonic score), with `O(1)` `SliceGeometry.cursorRect` and wrong-note overlays.
 
 ## Review checklist
 
