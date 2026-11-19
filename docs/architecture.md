@@ -11,6 +11,7 @@ Rules for where code goes and what may depend on what. Enforced by `flutter anal
 | `lib/features/progression/` | Difficulty stages, unlocked note pools (Core Cs → all Cs → landmarks → all naturals), and local persistence | `lib/features/progression/progression.dart` |
 | `lib/features/midi/` | BLE-MIDI discovery, connection lifecycle, Note On/Off stream | `lib/features/midi/midi.dart` |
 | `lib/shared/` | Music theory primitives, shared UI widgets, theme tokens used by ≥2 features | per-folder `<area>.dart` |
+| `packages/smufl_notation/` | Standalone OSS SMuFL grand-staff layout and `CustomPainter` package; zero app imports | `packages/smufl_notation/lib/smufl_notation.dart` |
 
 ## Layers and dependency direction
 
@@ -58,6 +59,7 @@ Files allowed over budget today with a refactor ticket. This list only shrinks.
 - **Riverpod without codegen:** Use `flutter_riverpod` with manual providers in `state/` and overrides in `app/`; omit `riverpod_generator` and `build_runner` to keep builds fast.
 - **Dart barrel convention:** Public APIs use `<feature>.dart` instead of `index.ts`.
 - **No Flutter stack appendix:** `scripts/hotspots.py --check` enforces file-line budgets; `analysis_options.yaml` enforces strict types and lints.
+- **Pure-Flutter SMuFL engraving (`packages/smufl_notation`):** Chose pure-Dart layout + `CustomPainter` over `Verovio` C++ FFI to avoid `LGPL-3.0` iOS static-linking conflict, `+7 MB/ABI` binary bloat (`0 KB` added by reusing `Bravura.otf`), and SVG re-parse latency (`<2ms` layout), while enabling `O(1)` `SliceGeometry.cursorRect` and wrong-note overlay painting.
 
 ## Review checklist
 

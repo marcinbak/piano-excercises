@@ -20,7 +20,7 @@
 | format check | `dart format --output=none --set-exit-if-changed .` |
 | lint & typecheck | `flutter analyze --fatal-infos` |
 | size gate | `python3 scripts/hotspots.py --repo . --check` |
-| test | `flutter test` |
+| test | `flutter test test packages/smufl_notation/test` |
 | build (Android) | `flutter build apk --debug` |
 | build (iOS) | `flutter build ios --no-codesign` |
 

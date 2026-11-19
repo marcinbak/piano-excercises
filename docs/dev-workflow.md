@@ -32,13 +32,13 @@ Project facts for the `dev-workflow` skill. The skill owns the process; this fil
 | lint | `flutter analyze --fatal-infos` | x | ✅ PR checks | Also runs `scripts/hotspots.py --check` separately |
 | typecheck | `flutter analyze --fatal-infos` | x | ✅ PR checks | Strict mode enabled (`strict-casts`, `strict-inference`, `strict-raw-types`) |
 | size gate | `python3 scripts/hotspots.py --repo . --check` | x | ✅ PR checks | Errors on tracked source files >500 non-blank lines |
-| unit test | `flutter test` | x | ✅ PR checks | Runs Dart unit and Flutter widget tests |
+| unit test | `flutter test test packages/smufl_notation/test` | x | ✅ PR checks | Runs root and workspace package Dart/Flutter tests |
 | compile/bundle gate | `flutter build apk --debug` | | ✅ PR checks | Catches broken Android/Dart imports and packaging |
 | build artifact (iOS) | `flutter build ios --no-codesign` | | ✅ PR checks | Runs on `macos-latest` (`ios-build` job) |
 | install to device | `flutter run --profile` (or `--release`) | | — | Physical iOS BLE-MIDI verified; untethered launches require AOT builds |
 | e2e | none — no E2E suite configured yet | | — | Revisit once drill UI and BLE-MIDI adapter exist |
 
-T0 set: `dart format --output=none --set-exit-if-changed .`, `flutter analyze --fatal-infos`, `python3 scripts/hotspots.py --repo . --check`, `flutter test`.
+T0 set: `dart format --output=none --set-exit-if-changed .`, `flutter analyze --fatal-infos`, `python3 scripts/hotspots.py --repo . --check`, `flutter test test packages/smufl_notation/test`.
 
 ## Runtime
 

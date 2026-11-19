@@ -1,0 +1,16 @@
+name: smufl_notation
+description: "Pure-Flutter SMuFL grand-staff music notation layout and CustomPainter engine."
+version: 0.1.0
+resolution: workspace
+
+environment:
+  sdk: ^3.14.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
