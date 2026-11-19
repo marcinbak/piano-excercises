@@ -140,6 +140,49 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+
+    testWidgets(
+      'n1: clamps visibleRect to top 0 when switching to shorter score',
+      (tester) async {
+        final controller = ScrollController();
+        addTearDown(controller.dispose);
+        Widget buildFor(NotationScore score) => Directionality(
+          textDirection: TextDirection.ltr,
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 780,
+              height: 520,
+              child: GrandStaffScoreView(score: score, controller: controller),
+            ),
+          ),
+        );
+
+        await tester.pumpWidget(buildFor(SpikeFixtures.polyphonicGrandStaff));
+        await tester.pumpAndSettle();
+        controller.jumpTo(850);
+        await tester.pump();
+        expect(controller.offset, greaterThan(800));
+
+        await tester.pumpWidget(buildFor(SpikeFixtures.simplifiedMelodyBass));
+        await tester.pumpAndSettle();
+
+        final paint = tester.widget<CustomPaint>(
+          find.byWidgetPredicate(
+            (w) => w is CustomPaint && w.painter is GrandStaffScorePainter,
+          ),
+        );
+        final painter = paint.painter! as GrandStaffScorePainter;
+        final sys0 = painter.layout.systems.first;
+        expect(painter.visibleRect?.top, 0.0);
+        expect(
+          painter.visibleRect!.overlaps(
+            Rect.fromLTWH(0, sys0.topY, 780, sys0.bottomY - sys0.topY),
+          ),
+          isTrue,
+        );
+      },
+    );
   });
 
   group('SmuflSpikeApp harness', () {

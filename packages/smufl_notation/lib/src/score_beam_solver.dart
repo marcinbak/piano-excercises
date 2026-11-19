@@ -110,11 +110,13 @@ abstract final class ScoreBeamSolver {
       placedSlices: placedSlices,
       members: members,
       clef: clef,
-      stemUp: stemUp,
-      firstX: firstX,
-      baseY: baseY,
-      slope: slope,
-      minStemPx: 2.6 * staffSpace,
+      line: (
+        stemUp: stemUp,
+        firstX: firstX,
+        baseY: baseY,
+        slope: slope,
+        minStemPx: 2.6 * staffSpace,
+      ),
     );
 
     final beamChords = <PlacedBeamChord>[];
@@ -153,23 +155,26 @@ abstract final class ScoreBeamSolver {
     required List<SliceGeometry> placedSlices,
     required List<int> members,
     required SmuflClef clef,
-    required bool stemUp,
-    required double firstX,
-    required double baseY,
-    required double slope,
-    required double minStemPx,
+    required ({
+      bool stemUp,
+      double firstX,
+      double baseY,
+      double slope,
+      double minStemPx,
+    })
+    line,
   }) {
     var shiftY = 0.0;
     for (final idx in members) {
       final placed = _placedChordForClef(placedSlices[idx], clef)!;
-      final lineY = baseY + (slope * (placed.stemX! - firstX));
-      final extremeY = stemUp
+      final lineY = line.baseY + (line.slope * (placed.stemX! - line.firstX));
+      final extremeY = line.stemUp
           ? placed.noteheads.map((n) => n.centerY).reduce(math.min)
           : placed.noteheads.map((n) => n.centerY).reduce(math.max);
-      final delta = stemUp
-          ? (extremeY - minStemPx) - lineY
-          : (extremeY + minStemPx) - lineY;
-      if ((stemUp && delta < shiftY) || (!stemUp && delta > shiftY)) {
+      final delta = line.stemUp
+          ? (extremeY - line.minStemPx) - lineY
+          : (extremeY + line.minStemPx) - lineY;
+      if ((line.stemUp && delta < shiftY) || (!line.stemUp && delta > shiftY)) {
         shiftY = delta;
       }
     }

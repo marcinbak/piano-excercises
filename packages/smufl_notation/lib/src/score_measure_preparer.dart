@@ -124,11 +124,13 @@ abstract final class ScoreMeasurePreparer {
         _prepareSingleMeasure(
           index: i,
           measure: m,
-          activeKey: activeKey,
-          keyChanged: keyChanged,
-          activeBeats: activeBeats,
-          activeBeatType: activeBeatType,
-          timeChanged: timeChanged,
+          header: (
+            activeKey: activeKey,
+            keyChanged: keyChanged,
+            activeBeats: activeBeats,
+            activeBeatType: activeBeatType,
+            timeChanged: timeChanged,
+          ),
           sp: sp,
         ),
       );
@@ -139,11 +141,14 @@ abstract final class ScoreMeasurePreparer {
   static PreparedMeasure _prepareSingleMeasure({
     required int index,
     required NotationMeasure measure,
-    required int activeKey,
-    required bool keyChanged,
-    required int activeBeats,
-    required int activeBeatType,
-    required bool timeChanged,
+    required ({
+      int activeKey,
+      bool keyChanged,
+      int activeBeats,
+      int activeBeatType,
+      bool timeChanged,
+    })
+    header,
     required double sp,
   }) {
     final tStems = ScoreBeamSolver.resolveBeamStemDirections(
@@ -177,11 +182,11 @@ abstract final class ScoreMeasurePreparer {
     return PreparedMeasure(
       index: index,
       measure: measure,
-      activeKeyFifths: activeKey,
-      keyChanged: keyChanged,
-      activeBeats: activeBeats,
-      activeBeatType: activeBeatType,
-      showTimeSignature: timeChanged,
+      activeKeyFifths: header.activeKey,
+      keyChanged: header.keyChanged,
+      activeBeats: header.activeBeats,
+      activeBeatType: header.activeBeatType,
+      showTimeSignature: header.timeChanged,
       slices: slices,
       bodyMinWidth: math.max(4.5 * sp, bodyMinWidth + (0.8 * sp)),
     );

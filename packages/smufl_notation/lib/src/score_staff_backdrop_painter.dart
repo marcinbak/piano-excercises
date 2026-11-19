@@ -76,10 +76,7 @@ abstract final class ScoreStaffBackdropPainter {
         system.clefCenterX,
         system.yForStep(SmuflClef.treble, SmuflClef.treble.referenceStep),
       ),
-      fontSize: style.fontSize,
-      color: colors.treble,
-      fontFamily: style.fontFamily,
-      fontPackage: style.fontPackage,
+      style: style.glyphStyle(colors.treble),
     );
     paintSmuflGlyph(
       canvas: canvas,
@@ -88,10 +85,7 @@ abstract final class ScoreStaffBackdropPainter {
         system.clefCenterX,
         system.yForStep(SmuflClef.bass, SmuflClef.bass.referenceStep),
       ),
-      fontSize: style.fontSize,
-      color: colors.bass,
-      fontFamily: style.fontFamily,
-      fontPackage: style.fontPackage,
+      style: style.glyphStyle(colors.bass),
     );
   }
 }

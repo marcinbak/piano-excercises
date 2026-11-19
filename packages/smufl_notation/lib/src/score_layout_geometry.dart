@@ -29,6 +29,15 @@ final class ScoreStyle {
 
   double get fontSize => staffSpace * 4.0;
 
+  /// Builds a SMuFL `TextStyle` sized to [fontSize] with [color].
+  TextStyle glyphStyle(Color color) => TextStyle(
+    fontFamily: fontFamily,
+    package: fontPackage,
+    fontSize: fontSize,
+    height: 1.0,
+    color: color,
+  );
+
   /// Returns a copy with overridden visual properties.
   ScoreStyle copyWith({double? staffSpace}) {
     return ScoreStyle(

@@ -92,6 +92,7 @@ abstract final class ScoreWrongNotePainter {
       ..color = style.errorColor
       ..strokeWidth = math.max(1.0, sp * 0.10);
     final ledgerHalf = (SmuflGlyphs.wholeNoteheadWidthSpaces * 0.72) * sp;
+    final errorStyle = style.glyphStyle(style.errorColor);
 
     for (final spec in specs) {
       for (final ly in spec.ledgerYs) {
@@ -105,20 +106,14 @@ abstract final class ScoreWrongNotePainter {
         canvas: canvas,
         glyph: SmuflGlyphs.noteheadWhole,
         anchor: Offset(spec.noteX, spec.noteY),
-        fontSize: style.fontSize,
-        color: style.errorColor,
-        fontFamily: style.fontFamily,
-        fontPackage: style.fontPackage,
+        style: errorStyle,
       );
       if (spec.accidentalX != null && spec.accidentalGlyph != null) {
         paintSmuflGlyph(
           canvas: canvas,
           glyph: spec.accidentalGlyph!,
           anchor: Offset(spec.accidentalX!, spec.noteY),
-          fontSize: style.fontSize,
-          color: style.errorColor,
-          fontFamily: style.fontFamily,
-          fontPackage: style.fontPackage,
+          style: errorStyle,
         );
       }
     }

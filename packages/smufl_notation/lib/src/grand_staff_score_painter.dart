@@ -122,10 +122,9 @@ class GrandStaffScorePainter extends CustomPainter {
         canvas: canvas,
         glyph: acc.glyph,
         anchor: Offset(acc.centerX, acc.centerY),
-        fontSize: style.fontSize,
-        color: acc.clef == SmuflClef.treble ? colors.treble : colors.bass,
-        fontFamily: style.fontFamily,
-        fontPackage: style.fontPackage,
+        style: style.glyphStyle(
+          acc.clef == SmuflClef.treble ? colors.treble : colors.bass,
+        ),
       );
     }
     if (measure.showTimeSignature &&

@@ -48,7 +48,13 @@ abstract final class ScoreTieSolver {
       if (tie == TieFlag.stop || tie == TieFlag.continueTie) {
         final start = ctx.pending.remove(key);
         if (start != null) {
-          _emitTieArcs(ctx, start, system, measure, head, chord.clef, curveUp);
+          _emitTieArcs(ctx, start, (
+            system: system,
+            measure: measure,
+            head: head,
+            clef: chord.clef,
+            curveUp: curveUp,
+          ));
         }
       }
       if (tie == TieFlag.start || tie == TieFlag.continueTie) {
@@ -66,20 +72,23 @@ abstract final class ScoreTieSolver {
   static void _emitTieArcs(
     _TieContext ctx,
     _PendingTie start,
-    SystemGeometry endSystem,
-    MeasureGeometry endMeasure,
-    PlacedNotehead endHead,
-    SmuflClef clef,
-    bool curveUp,
+    ({
+      SystemGeometry system,
+      MeasureGeometry measure,
+      PlacedNotehead head,
+      SmuflClef clef,
+      bool curveUp,
+    })
+    end,
   ) {
-    if (start.system.systemIndex == endSystem.systemIndex) {
+    if (start.system.systemIndex == end.system.systemIndex) {
       ctx.addArc(
-        endMeasure.measureNumber,
+        end.measure.measureNumber,
         PlacedTieArc(
-          clef: clef,
+          clef: end.clef,
           startX: start.x + ctx.headGap,
-          endX: endHead.centerX - ctx.headGap,
-          y: endHead.centerY,
+          endX: end.head.centerX - ctx.headGap,
+          y: end.head.centerY,
           curveUp: start.curveUp,
         ),
       );
@@ -88,7 +97,7 @@ abstract final class ScoreTieSolver {
     ctx.addArc(
       start.measureNumber,
       PlacedTieArc(
-        clef: clef,
+        clef: end.clef,
         startX: start.x + ctx.headGap,
         endX: start.system.rightX - (0.35 * ctx.staffSpace),
         y: start.y,
@@ -96,16 +105,16 @@ abstract final class ScoreTieSolver {
       ),
     );
     ctx.addArc(
-      endMeasure.measureNumber,
+      end.measure.measureNumber,
       PlacedTieArc(
-        clef: clef,
+        clef: end.clef,
         startX: math.max(
-          endMeasure.leftX + (0.35 * ctx.staffSpace),
-          endHead.centerX - (2.2 * ctx.staffSpace),
+          end.measure.leftX + (0.35 * ctx.staffSpace),
+          end.head.centerX - (2.2 * ctx.staffSpace),
         ),
-        endX: endHead.centerX - ctx.headGap,
-        y: endHead.centerY,
-        curveUp: curveUp,
+        endX: end.head.centerX - ctx.headGap,
+        y: end.head.centerY,
+        curveUp: end.curveUp,
       ),
     );
   }

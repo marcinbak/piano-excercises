@@ -68,23 +68,11 @@ void paintSmuflGlyph({
   required Canvas canvas,
   required String glyph,
   required Offset anchor,
-  required double fontSize,
-  required Color color,
-  String fontFamily = 'Bravura',
-  String? fontPackage,
+  required TextStyle style,
   bool centerHorizontally = true,
 }) {
   final painter = TextPainter(
-    text: TextSpan(
-      text: glyph,
-      style: TextStyle(
-        fontFamily: fontFamily,
-        package: fontPackage,
-        fontSize: fontSize,
-        height: 1.0,
-        color: color,
-      ),
-    ),
+    text: TextSpan(text: glyph, style: style),
     textDirection: TextDirection.ltr,
   );
   // SMuFL aligns glyphs via alphabetic baseline; always dispose TextPainter.

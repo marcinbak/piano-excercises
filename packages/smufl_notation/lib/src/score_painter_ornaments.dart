@@ -1,5 +1,6 @@
 import 'dart:math' as math;
-import 'dart:ui';
+
+import 'package:flutter/painting.dart';
 
 import 'package:smufl_notation/src/notation_model.dart';
 import 'package:smufl_notation/src/score_layout_types.dart';
@@ -66,21 +67,20 @@ abstract final class ScorePainterOrnaments {
       (SmuflClef.treble, colors.treble),
       (SmuflClef.bass, colors.bass),
     ]) {
+      final glyphStyle = style.glyphStyle(entry.$2);
       _paintDigits(
         canvas: canvas,
         number: beats,
-        centerX: centerX,
-        y: system.yForStep(entry.$1, 6),
-        style: style,
-        color: entry.$2,
+        anchor: Offset(centerX, system.yForStep(entry.$1, 6)),
+        staffSpace: style.staffSpace,
+        glyphStyle: glyphStyle,
       );
       _paintDigits(
         canvas: canvas,
         number: beatType,
-        centerX: centerX,
-        y: system.yForStep(entry.$1, 2),
-        style: style,
-        color: entry.$2,
+        anchor: Offset(centerX, system.yForStep(entry.$1, 2)),
+        staffSpace: style.staffSpace,
+        glyphStyle: glyphStyle,
       );
     }
   }
@@ -88,23 +88,19 @@ abstract final class ScorePainterOrnaments {
   static void _paintDigits({
     required Canvas canvas,
     required int number,
-    required double centerX,
-    required double y,
-    required ScoreStyle style,
-    required Color color,
+    required Offset anchor,
+    required double staffSpace,
+    required TextStyle glyphStyle,
   }) {
     final text = number.toString();
-    final stepX = style.staffSpace * 1.35;
-    final startX = centerX - ((text.length - 1) * stepX * 0.5);
+    final stepX = staffSpace * 1.35;
+    final startX = anchor.dx - ((text.length - 1) * stepX * 0.5);
     for (var i = 0; i < text.length; i += 1) {
       paintSmuflGlyph(
         canvas: canvas,
         glyph: SmuflGlyphs.timeSigDigit(int.parse(text[i])),
-        anchor: Offset(startX + (i * stepX), y),
-        fontSize: style.fontSize,
-        color: color,
-        fontFamily: style.fontFamily,
-        fontPackage: style.fontPackage,
+        anchor: Offset(startX + (i * stepX), anchor.dy),
+        style: glyphStyle,
       );
     }
   }

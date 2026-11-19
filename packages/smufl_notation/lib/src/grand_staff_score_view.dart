@@ -66,6 +66,11 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
       }
       _controller.addListener(_syncVisibleRect);
     }
+    if (oldWidget.controller != widget.controller ||
+        oldWidget.score != widget.score ||
+        oldWidget.style != widget.style) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _syncVisibleRect());
+    }
     if (widget.activeSliceIndex != oldWidget.activeSliceIndex &&
         widget.activeSliceIndex != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -109,7 +114,13 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
     if (!mounted || _viewportWidth <= 0 || _viewportHeight <= 0) {
       return;
     }
-    final top = _controller.hasClients ? _controller.offset : 0.0;
+    var top = 0.0;
+    if (_controller.hasClients) {
+      final pos = _controller.position;
+      top = pos.hasContentDimensions
+          ? pos.pixels.clamp(0.0, pos.maxScrollExtent)
+          : math.max(0.0, pos.pixels);
+    }
     final next = Rect.fromLTWH(0, top, _viewportWidth, _viewportHeight);
     if (_visibleRect.value != next) {
       _visibleRect.value = next;
@@ -188,6 +199,14 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
             child: ValueListenableBuilder<Rect?>(
               valueListenable: _visibleRect,
               builder: (context, rect, _) {
+                final rawRect = rect ?? initialRect;
+                final maxTop = math.max(0.0, layout.totalSize.height - height);
+                final effectiveRect = Rect.fromLTWH(
+                  0,
+                  rawRect.top.clamp(0.0, maxTop),
+                  width,
+                  height,
+                );
                 return RepaintBoundary(
                   child: CustomPaint(
                     size: layout.totalSize,
@@ -196,7 +215,7 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
                       activeSliceIndex: widget.activeSliceIndex,
                       dimmedClef: widget.dimmedClef,
                       wrongNoteOverlays: widget.wrongNoteOverlays,
-                      visibleRect: rect ?? initialRect,
+                      visibleRect: effectiveRect,
                     ),
                   ),
                 );
