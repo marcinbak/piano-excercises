@@ -204,5 +204,108 @@ void main() {
         expect(s3.requiresAnyAttack, isFalse);
       },
     );
+
+    test('tied continuations across barline do not bleed accidental state to subsequent attacks', () {
+      // C major: bar 1 F#4 tied into bar 2 beat 1, then newly attacked F#4 on beat 2 requires sharp.
+      final cMajorScore = ScoreTimelineReducer.reduce(
+        title: 'Tie Bleed C Major',
+        initialScale: Scale.fromKeySignature(KeySignature.cMajor),
+        initialTimeSignature: TimeSignature(2, 4),
+        measures: <MeasureTimelineInput>[
+          MeasureTimelineInput(
+            measureNumber: 1,
+            notes: <NoteTimelineInput>[
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.f,
+                octave: 4,
+                explicitAlter: 1,
+                writtenAccidental: Accidental.sharp,
+                beatOffset: const RationalBeats.zero(),
+                duration: half,
+                tie: TieType.start,
+              ),
+            ],
+          ),
+          MeasureTimelineInput(
+            measureNumber: 2,
+            notes: <NoteTimelineInput>[
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.f,
+                octave: 4,
+                explicitAlter: 1,
+                beatOffset: const RationalBeats.zero(),
+                duration: quarter,
+                tie: TieType.stop,
+              ),
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.f,
+                octave: 4,
+                explicitAlter: 1,
+                beatOffset: RationalBeats(1),
+                duration: quarter,
+              ),
+            ],
+          ),
+        ],
+      );
+      final cM2 = cMajorScore.measures[1];
+      expect(cM2.slices[0].trebleNotes.single.showAccidental, isFalse);
+      expect(cM2.slices[1].trebleNotes.single.staffNote.pitchName, 'F#4');
+      expect(cM2.slices[1].trebleNotes.single.showAccidental, isTrue);
+
+      // G major: bar 1 F4 natural tied into bar 2 beat 1, then normal F#4 on beat 2 suppresses sharp.
+      final gMajorScore = ScoreTimelineReducer.reduce(
+        title: 'Tie Bleed G Major',
+        initialScale: Scale.fromKeySignature(const KeySignature(1)),
+        initialTimeSignature: TimeSignature(2, 4),
+        measures: <MeasureTimelineInput>[
+          MeasureTimelineInput(
+            measureNumber: 1,
+            notes: <NoteTimelineInput>[
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.f,
+                octave: 4,
+                explicitAlter: 0,
+                writtenAccidental: Accidental.natural,
+                beatOffset: const RationalBeats.zero(),
+                duration: half,
+                tie: TieType.start,
+              ),
+            ],
+          ),
+          MeasureTimelineInput(
+            measureNumber: 2,
+            notes: <NoteTimelineInput>[
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.f,
+                octave: 4,
+                explicitAlter: 0,
+                beatOffset: const RationalBeats.zero(),
+                duration: quarter,
+                tie: TieType.stop,
+              ),
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.f,
+                octave: 4,
+                explicitAlter: 1,
+                beatOffset: RationalBeats(1),
+                duration: quarter,
+              ),
+            ],
+          ),
+        ],
+      );
+      final gM2 = gMajorScore.measures[1];
+      expect(gM2.slices[0].trebleNotes.single.staffNote.pitchName, 'F4');
+      expect(gM2.slices[0].trebleNotes.single.showAccidental, isFalse);
+      expect(gM2.slices[1].trebleNotes.single.staffNote.pitchName, 'F#4');
+      expect(gM2.slices[1].trebleNotes.single.showAccidental, isFalse);
+    });
   });
 }

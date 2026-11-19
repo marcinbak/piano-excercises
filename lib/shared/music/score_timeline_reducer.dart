@@ -3,6 +3,7 @@ import 'package:piano_exercises/shared/music/key_signature.dart';
 import 'package:piano_exercises/shared/music/pitch_class.dart';
 import 'package:piano_exercises/shared/music/rhythm.dart';
 import 'package:piano_exercises/shared/music/score.dart';
+import 'package:piano_exercises/shared/music/score_slice_builder.dart';
 import 'package:piano_exercises/shared/music/score_timeline_inputs.dart';
 import 'package:piano_exercises/shared/music/staff_note.dart';
 
@@ -20,26 +21,19 @@ abstract final class ScoreTimelineReducer {
     TempoMark? initialTempo,
     required List<MeasureTimelineInput> measures,
   }) {
-    final scoreScale = _resolveInitialScale(initialScale, measures);
-    final scoreTimeSignature = _resolveInitialTimeSignature(
-      initialTimeSignature,
-      measures,
-    );
-    final scoreInitialTempo = initialTempo ?? _findFirstTempo(measures);
-
+    final first = measures.isEmpty ? null : measures.first;
+    final scoreScale =
+        initialScale ??
+        Scale.fromKeySignature(first?.keySignature ?? KeySignature.cMajor);
+    final scoreTime =
+        initialTimeSignature ?? first?.timeSignature ?? TimeSignature.common;
     var activeKey = scoreScale.keySignature;
-    var activeTime = scoreTimeSignature;
+    var activeTime = scoreTime;
     var nextSliceIndex = 0;
     final reducedMeasures = <ScoreMeasure>[];
-
     for (final measureInput in measures) {
-      if (measureInput.keySignature != null) {
-        activeKey = measureInput.keySignature!;
-      }
-      if (measureInput.timeSignature != null) {
-        activeTime = measureInput.timeSignature!;
-      }
-
+      activeKey = measureInput.keySignature ?? activeKey;
+      activeTime = measureInput.timeSignature ?? activeTime;
       final (measure, updatedIndex) = _reduceMeasure(
         measureInput,
         activeKey: activeKey,
@@ -49,13 +43,12 @@ abstract final class ScoreTimelineReducer {
       nextSliceIndex = updatedIndex;
       reducedMeasures.add(measure);
     }
-
     return Score(
       title: title,
       artist: artist,
       scale: scoreScale,
-      timeSignature: scoreTimeSignature,
-      initialTempo: scoreInitialTempo,
+      timeSignature: scoreTime,
+      initialTempo: initialTempo ?? _findFirstTempo(measures),
       measures: reducedMeasures,
     );
   }
@@ -66,15 +59,49 @@ abstract final class ScoreTimelineReducer {
     required TimeSignature activeTime,
     required int startSliceIndex,
   }) {
-    // Accidental alterations reset at every barline.
-    final activeAlterations = <(Clef, DiatonicNote, int), Accidental>{};
     final notesByOffset = <RationalBeats, List<ScoreNote>>{};
     final restsByOffset = <RationalBeats, List<RestEvent>>{};
-    var maxEndOffset = const RationalBeats.zero();
+    final noteMaxEnd = _collectNotes(
+      measureInput.notes,
+      activeKey: activeKey,
+      notesByOffset: notesByOffset,
+    );
+    final restMaxEnd = _collectRests(
+      measureInput.rests,
+      restsByOffset: restsByOffset,
+    );
+    final maxEnd = noteMaxEnd > restMaxEnd ? noteMaxEnd : restMaxEnd;
+    final (slices, nextSliceIndex) = _buildMeasureSlices(
+      measureNumber: measureInput.measureNumber,
+      activeTime: activeTime,
+      startSliceIndex: startSliceIndex,
+      maxEndOffset: maxEnd,
+      notesByOffset: notesByOffset,
+      restsByOffset: restsByOffset,
+    );
+    return (
+      ScoreMeasure(
+        measureNumber: measureInput.measureNumber,
+        slices: slices,
+        keySignature: measureInput.keySignature,
+        timeSignature: measureInput.timeSignature,
+        tempoMark: measureInput.tempoMark,
+      ),
+      nextSliceIndex,
+    );
+  }
 
-    final sortedNotes = List<NoteTimelineInput>.of(measureInput.notes)
-      ..sort(compareNoteTimelineInputs);
-    for (final input in sortedNotes) {
+  static RationalBeats _collectNotes(
+    List<NoteTimelineInput> rawNotes, {
+    required KeySignature activeKey,
+    required Map<RationalBeats, List<ScoreNote>> notesByOffset,
+  }) {
+    // Accidental alterations reset at every barline.
+    final activeAlterations = <(Clef, DiatonicNote, int), Accidental>{};
+    var maxEnd = const RationalBeats.zero();
+    for (final input in List<NoteTimelineInput>.of(
+      rawNotes,
+    )..sort(compareNoteTimelineInputs)) {
       final note = _resolveScoreNote(
         input,
         activeKey: activeKey,
@@ -83,29 +110,46 @@ abstract final class ScoreTimelineReducer {
       notesByOffset
           .putIfAbsent(input.beatOffset, () => <ScoreNote>[])
           .add(note);
-      final endOffset = input.beatOffset + input.duration.quarterBeats;
-      if (endOffset > maxEndOffset) {
-        maxEndOffset = endOffset;
+      final end = input.beatOffset + input.duration.quarterBeats;
+      if (end > maxEnd) {
+        maxEnd = end;
       }
     }
+    return maxEnd;
+  }
 
-    final sortedRests = List<RestTimelineInput>.of(measureInput.rests)
-      ..sort(compareRestTimelineInputs);
-    for (final restInput in sortedRests) {
+  static RationalBeats _collectRests(
+    List<RestTimelineInput> rawRests, {
+    required Map<RationalBeats, List<RestEvent>> restsByOffset,
+  }) {
+    var maxEnd = const RationalBeats.zero();
+    for (final input in List<RestTimelineInput>.of(
+      rawRests,
+    )..sort(compareRestTimelineInputs)) {
       final rest = RestEvent(
-        clef: restInput.clef,
-        duration: restInput.duration,
-        voice: restInput.voice,
+        clef: input.clef,
+        duration: input.duration,
+        voice: input.voice,
       );
       restsByOffset
-          .putIfAbsent(restInput.beatOffset, () => <RestEvent>[])
+          .putIfAbsent(input.beatOffset, () => <RestEvent>[])
           .add(rest);
-      final endOffset = restInput.beatOffset + restInput.duration.quarterBeats;
-      if (endOffset > maxEndOffset) {
-        maxEndOffset = endOffset;
+      final end = input.beatOffset + input.duration.quarterBeats;
+      if (end > maxEnd) {
+        maxEnd = end;
       }
     }
+    return maxEnd;
+  }
 
+  static (List<ScoreSlice>, int) _buildMeasureSlices({
+    required int measureNumber,
+    required TimeSignature activeTime,
+    required int startSliceIndex,
+    required RationalBeats maxEndOffset,
+    required Map<RationalBeats, List<ScoreNote>> notesByOffset,
+    required Map<RationalBeats, List<RestEvent>> restsByOffset,
+  }) {
     final offsets = <RationalBeats>{
       ...notesByOffset.keys,
       ...restsByOffset.keys,
@@ -113,16 +157,15 @@ abstract final class ScoreTimelineReducer {
     final measureEnd = maxEndOffset.isZero
         ? activeTime.measureQuarterBeats
         : maxEndOffset;
-
     var nextSliceIndex = startSliceIndex;
     final slices = <ScoreSlice>[];
     for (var i = 0; i < offsets.length; i += 1) {
       final offset = offsets[i];
       final nextOffset = (i + 1 < offsets.length) ? offsets[i + 1] : measureEnd;
       slices.add(
-        _buildSlice(
+        buildScoreSlice(
           sliceIndex: nextSliceIndex++,
-          measureNumber: measureInput.measureNumber,
+          measureNumber: measureNumber,
           beatOffset: offset,
           beatDuration: nextOffset - offset,
           notes: notesByOffset[offset] ?? const <ScoreNote>[],
@@ -130,65 +173,7 @@ abstract final class ScoreTimelineReducer {
         ),
       );
     }
-
-    final measure = ScoreMeasure(
-      measureNumber: measureInput.measureNumber,
-      slices: slices,
-      keySignature: measureInput.keySignature,
-      timeSignature: measureInput.timeSignature,
-      tempoMark: measureInput.tempoMark,
-    );
-    return (measure, nextSliceIndex);
-  }
-
-  static ScoreSlice _buildSlice({
-    required int sliceIndex,
-    required int measureNumber,
-    required RationalBeats beatOffset,
-    required RationalBeats beatDuration,
-    required List<ScoreNote> notes,
-    required List<RestEvent> rests,
-  }) {
-    final trebleNotes =
-        notes.where((note) => note.staffNote.clef == Clef.treble).toList()
-          ..sort(_compareSliceNotes);
-    final bassNotes =
-        notes.where((note) => note.staffNote.clef == Clef.bass).toList()
-          ..sort(_compareSliceNotes);
-    return ScoreSlice(
-      sliceIndex: sliceIndex,
-      measureNumber: measureNumber,
-      beatOffset: beatOffset,
-      beatDuration: beatDuration,
-      trebleNotes: trebleNotes,
-      bassNotes: bassNotes,
-      trebleRest: trebleNotes.isEmpty
-          ? _firstRestForClef(rests, Clef.treble)
-          : null,
-      bassRest: bassNotes.isEmpty ? _firstRestForClef(rests, Clef.bass) : null,
-    );
-  }
-
-  static Scale _resolveInitialScale(
-    Scale? initialScale,
-    List<MeasureTimelineInput> measures,
-  ) {
-    if (initialScale != null) {
-      return initialScale;
-    }
-    final firstKey = measures.isEmpty ? null : measures.first.keySignature;
-    return Scale.fromKeySignature(firstKey ?? KeySignature.cMajor);
-  }
-
-  static TimeSignature _resolveInitialTimeSignature(
-    TimeSignature? initialTimeSignature,
-    List<MeasureTimelineInput> measures,
-  ) {
-    if (initialTimeSignature != null) {
-      return initialTimeSignature;
-    }
-    final firstTime = measures.isEmpty ? null : measures.first.timeSignature;
-    return firstTime ?? TimeSignature.common;
+    return (slices, nextSliceIndex);
   }
 
   static TempoMark? _findFirstTempo(List<MeasureTimelineInput> measures) {
@@ -216,7 +201,10 @@ abstract final class ScoreTimelineReducer {
         ? (input.writtenAccidental != null ||
               resolvedAccidental != currentActive)
         : input.writtenAccidental != null;
-    activeAlterations[key] = resolvedAccidental;
+    // Update bar accidental state only on new attacks or explicit cautionary accidentals.
+    if (input.tie.requiresAttack || input.writtenAccidental != null) {
+      activeAlterations[key] = resolvedAccidental;
+    }
 
     return ScoreNote(
       staffNote: StaffNote.validated(
@@ -231,23 +219,5 @@ abstract final class ScoreTimelineReducer {
       voice: input.voice,
       beamGroupId: input.beamGroupId,
     );
-  }
-
-  static RestEvent? _firstRestForClef(List<RestEvent> rests, Clef clef) {
-    for (final rest in rests) {
-      if (rest.clef == clef) {
-        return rest;
-      }
-    }
-    return null;
-  }
-
-  static int _compareSliceNotes(ScoreNote a, ScoreNote b) {
-    final stepCmp = a.staffNote.diatonicStep.compareTo(
-      b.staffNote.diatonicStep,
-    );
-    return stepCmp != 0
-        ? stepCmp
-        : a.midiNote.number.compareTo(b.midiNote.number);
   }
 }

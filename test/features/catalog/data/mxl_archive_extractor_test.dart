@@ -221,6 +221,45 @@ void main() {
         () => extractor.extractMusicXmlBytes(zip64Locator),
         throwsA(isA<ScoreParseException>()),
       );
+
+      // ZIP comment containing PK\x05\x06 signature triggers desync rejection.
+      final commentWithSig = <int>[
+        0x50,
+        0x4B,
+        0x05,
+        0x06,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x01,
+        0x00,
+        0x01,
+        0x00,
+        0x10,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+      ];
+      final withCommentSig = Uint8List(valid.length + commentWithSig.length)
+        ..setRange(0, valid.length, valid)
+        ..setRange(
+          valid.length,
+          valid.length + commentWithSig.length,
+          commentWithSig,
+        );
+      withCommentSig[eocdrPos + 20] = commentWithSig.length & 0xFF;
+      withCommentSig[eocdrPos + 21] = (commentWithSig.length >> 8) & 0xFF;
+      expect(
+        () => extractor.extractMusicXmlBytes(withCommentSig),
+        throwsA(isA<ScoreParseException>()),
+      );
     });
 
     test('rejects unsafe paths in ZIP entries and container.xml full-path', () {

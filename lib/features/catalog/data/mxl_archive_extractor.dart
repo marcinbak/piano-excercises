@@ -4,6 +4,7 @@ import 'package:archive/archive.dart';
 import 'package:piano_exercises/features/catalog/data/bounded_zip_stream.dart';
 import 'package:piano_exercises/features/catalog/data/hardened_xml_loader.dart';
 import 'package:piano_exercises/features/catalog/data/mxl_entry_validator.dart';
+import 'package:piano_exercises/features/catalog/data/mxl_eocdr_validator.dart';
 import 'package:piano_exercises/features/catalog/domain/score_parser.dart';
 import 'package:xml/xml.dart';
 
@@ -45,10 +46,7 @@ final class MxlArchiveExtractor {
       );
     }
 
-    MxlEntryValidator.validateCentralDirectoryBounds(
-      bytes,
-      maxEntries: maxEntries,
-    );
+    MxlEocdrValidator.validate(bytes, maxEntries: maxEntries);
     final directory = _readDirectory(bytes);
     if (directory.fileHeaders.isEmpty ||
         directory.fileHeaders.length > maxEntries ||
