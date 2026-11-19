@@ -19,6 +19,8 @@ class GrandStaffPainter extends CustomPainter {
   static const String _wholeNoteGlyph = '\uE0A2';
   static const String _sharpGlyph = '\uE262';
   static const String _flatGlyph = '\uE260';
+  static const String _doubleSharpGlyph = '\uE263';
+  static const String _doubleFlatGlyph = '\uE264';
   static const int _maxLedgerLines = 8;
 
   final StaffNote targetNote;
@@ -206,8 +208,10 @@ class GrandStaffPainter extends CustomPainter {
     double? accidentalCenterX,
   }) {
     final accidentalGlyph = switch (note.accidental) {
+      Accidental.doubleSharp => _doubleSharpGlyph,
       Accidental.sharp => _sharpGlyph,
       Accidental.flat => _flatGlyph,
+      Accidental.doubleFlat => _doubleFlatGlyph,
       Accidental.natural => null,
     };
     if (accidentalGlyph == null) {

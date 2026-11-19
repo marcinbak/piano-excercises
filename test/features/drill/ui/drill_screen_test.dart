@@ -515,6 +515,18 @@ void main() {
           clef: Clef.treble,
           accidental: Accidental.sharp,
         ),
+        StaffNote(
+          note: DiatonicNote.f,
+          octave: 4,
+          clef: Clef.treble,
+          accidental: Accidental.doubleSharp,
+        ),
+        StaffNote(
+          note: DiatonicNote.b,
+          octave: 3,
+          clef: Clef.bass,
+          accidental: Accidental.doubleFlat,
+        ),
         StaffNote(note: DiatonicNote.g, octave: 9, clef: Clef.treble),
       ];
 

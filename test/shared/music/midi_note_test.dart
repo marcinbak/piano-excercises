@@ -25,6 +25,28 @@ void main() {
     });
   });
 
+  group('Accidental', () {
+    test('maps doubleFlat..doubleSharp semitone deltas and symbols', () {
+      expect(Accidental.doubleFlat.semitoneOffset, -2);
+      expect(Accidental.doubleFlat.symbol, 'bb');
+      expect(Accidental.flat.semitoneOffset, -1);
+      expect(Accidental.natural.semitoneOffset, 0);
+      expect(Accidental.sharp.semitoneOffset, 1);
+      expect(Accidental.doubleSharp.semitoneOffset, 2);
+      expect(Accidental.doubleSharp.symbol, 'x');
+
+      expect(Accidental.fromSemitoneDelta(-2), Accidental.doubleFlat);
+      expect(Accidental.fromSemitoneDelta(0), Accidental.natural);
+      expect(Accidental.fromSemitoneDelta(2), Accidental.doubleSharp);
+      expect(() => Accidental.fromSemitoneDelta(-3), throwsRangeError);
+      expect(() => Accidental.fromSemitoneDelta(3), throwsRangeError);
+
+      expect(Accidental.tryFromSemitoneDelta(-2), Accidental.doubleFlat);
+      expect(Accidental.tryFromSemitoneDelta(2), Accidental.doubleSharp);
+      expect(Accidental.tryFromSemitoneDelta(3), isNull);
+    });
+  });
+
   group('MidiNote', () {
     test('exposes boundary values and scientific pitch properties', () {
       const cMinus1 = MidiNote(0);
@@ -127,12 +149,44 @@ void main() {
           ),
           const MidiNote(0),
         );
+        expect(
+          MidiNote.fromPitch(
+            DiatonicNote.d,
+            octave: -1,
+            accidental: Accidental.doubleFlat,
+          ),
+          const MidiNote(0),
+        );
+        expect(
+          MidiNote.fromPitch(
+            DiatonicNote.f,
+            octave: 9,
+            accidental: Accidental.doubleSharp,
+          ),
+          const MidiNote(127),
+        );
 
         expect(
           () => MidiNote.fromPitch(
             DiatonicNote.c,
             octave: -1,
             accidental: Accidental.flat,
+          ),
+          throwsRangeError,
+        );
+        expect(
+          () => MidiNote.fromPitch(
+            DiatonicNote.c,
+            octave: -1,
+            accidental: Accidental.doubleFlat,
+          ),
+          throwsRangeError,
+        );
+        expect(
+          () => MidiNote.fromPitch(
+            DiatonicNote.g,
+            octave: 9,
+            accidental: Accidental.doubleSharp,
           ),
           throwsRangeError,
         );

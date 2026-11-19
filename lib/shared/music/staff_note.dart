@@ -28,10 +28,14 @@ final class StaffNote {
                      : note == DiatonicNote.a
                      ? 9
                      : 11) +
-                 (accidental == Accidental.flat
+                 (accidental == Accidental.doubleFlat
+                     ? -2
+                     : accidental == Accidental.flat
                      ? -1
                      : accidental == Accidental.sharp
                      ? 1
+                     : accidental == Accidental.doubleSharp
+                     ? 2
                      : 0)) >=
              MidiNote.minNumber,
        ),
@@ -50,10 +54,14 @@ final class StaffNote {
                      : note == DiatonicNote.a
                      ? 9
                      : 11) +
-                 (accidental == Accidental.flat
+                 (accidental == Accidental.doubleFlat
+                     ? -2
+                     : accidental == Accidental.flat
                      ? -1
                      : accidental == Accidental.sharp
                      ? 1
+                     : accidental == Accidental.doubleSharp
+                     ? 2
                      : 0)) <=
              MidiNote.maxNumber,
        );

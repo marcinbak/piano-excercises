@@ -16,14 +16,39 @@ enum DiatonicNote {
 
 /// Chromatic alteration relative to a natural [DiatonicNote].
 enum Accidental {
+  doubleFlat(-2, 'bb'),
   flat(-1, 'b'),
   natural(0, ''),
-  sharp(1, '#');
+  sharp(1, '#'),
+  doubleSharp(2, 'x');
 
   const Accidental(this.semitoneDelta, this.symbol);
 
   final int semitoneDelta;
   final String symbol;
+
+  int get semitoneOffset => semitoneDelta;
+
+  /// Returns the [Accidental] for [delta] in `-2..2`, or `null` outside range.
+  static Accidental? tryFromSemitoneDelta(int delta) {
+    return switch (delta) {
+      -2 => doubleFlat,
+      -1 => flat,
+      0 => natural,
+      1 => sharp,
+      2 => doubleSharp,
+      _ => null,
+    };
+  }
+
+  /// Resolves [delta] in `-2..2` to an [Accidental], throwing [RangeError] otherwise.
+  static Accidental fromSemitoneDelta(int delta) {
+    final accidental = tryFromSemitoneDelta(delta);
+    if (accidental == null) {
+      throw RangeError.range(delta, -2, 2, 'delta');
+    }
+    return accidental;
+  }
 }
 
 /// The twelve chromatic pitch classes (`0..11`), named with sharp spellings.
