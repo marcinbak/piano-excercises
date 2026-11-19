@@ -11,7 +11,7 @@ Rules for where code goes and what may depend on what. Enforced by `flutter anal
 | `lib/features/drill/` | Sight-reading loop: staff display, target note, pitch validation, feedback | `lib/features/drill/drill.dart` |
 | `lib/features/progression/` | Difficulty stages, unlocked note pools (Core Cs → all Cs → landmarks → all naturals), and local persistence | `lib/features/progression/progression.dart` |
 | `lib/features/midi/` | BLE-MIDI discovery, connection lifecycle, Note On/Off stream | `lib/features/midi/midi.dart` |
-| `lib/features/piece_practice/` | Interactive grand-staff score viewport, hand dimming, and `Score`-to-`NotationScore` mapping | `lib/features/piece_practice/piece_practice.dart` |
+| `lib/features/piece_practice/` | Interactive grand-staff score practice, polyphonic Wait-Mode evaluation, measure loops, hand dimming, and `Score`-to-`NotationScore` mapping | `lib/features/piece_practice/piece_practice.dart` |
 | `lib/shared/` | Music theory and score primitives, shared UI widgets, theme tokens used by ≥2 features | per-folder `<area>.dart` |
 | `packages/smufl_notation/` | Standalone OSS SMuFL grand-staff layout and `CustomPainter` package; zero app imports | `packages/smufl_notation/lib/smufl_notation.dart` |
 

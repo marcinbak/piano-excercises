@@ -17,3 +17,9 @@
 - **Symptom:** `FutureProvider.autoDispose` hangs on `AsyncLoading` for ~25s (and times out `.future` in unit tests) when a local file read or parse throws.
 - **Root cause:** Riverpod 3 retries async provider errors with exponential backoff by default unless `retry` returns `null`, and `autoDispose` cancels un-listened `.future` reads with `ProviderDisposedException`.
 - **Fix:** Pass `retry: (_, _) => null` on deterministic local `FutureProvider`s and keep an active `container.listen` subscription when testing `.future` errors ([piece_score_providers.dart](../../lib/features/piece_practice/state/piece_score_providers.dart)).
+
+## Retaining `autoDispose` `Notifier` state across `AsyncLoading`
+
+- **Symptom:** Mutating `practicePausedProvider` while an async screen is in `AsyncLoading` loses the written state next frame.
+- **Root cause:** Riverpod disposes an `autoDispose` `Notifier` at end of frame when no mounted child watches it.
+- **Fix:** Retain the provider with `ref.listen` in the host widget `build()` ([piece_score_screen.dart](../../lib/features/piece_practice/ui/piece_score_screen.dart)).
