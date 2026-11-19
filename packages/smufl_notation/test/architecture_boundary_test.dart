@@ -111,7 +111,10 @@ void _checkLayerImports(String rel, List<String> imports) {
 void main() {
   final pkgRoot = _resolvePackageRoot();
   final libFiles = _dartFilesIn(Directory('${pkgRoot.path}/lib'));
-  final partRe = RegExp(r'(?:^|;)\s*part\b', multiLine: true);
+  final partRe = RegExp(
+    r'''(?:^|;)\s*part\s+(?:of\b|r?['"])''',
+    multiLine: true,
+  );
 
   test('lib/ exposes only smufl_notation.dart and 5 src/ layers', () {
     const layers = <String>{'glyphs', 'model', 'layout', 'painting', 'widgets'};
