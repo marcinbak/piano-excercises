@@ -15,5 +15,11 @@
 ## Native file pickers grey out `.mxl` under `FileType.custom`
 
 - **Symptom:** Android and iOS system file pickers disable `.mxl` files when filtered by custom extensions.
-- **Root cause:** Android `DocumentsUI` and iOS `UTType` lack built-in `.mxl` MIME mappings.
-- **Fix:** Open `FilePicker.pickFile` with `FileType.any`, validate `.mxl`/`.musicxml` suffixes, and stream-cap `10 MB` in [FilePickerScoreImporter](../../lib/features/catalog/data/file_picker_score_importer.dart).
+- **Root cause:** Android `DocumentsUI` and iOS `UTType` lack built-in `.mxl` MIME mappings; `file_picker` `13.4.0` `pickFiles` returns `List<PlatformFile>` directly without `allowMultiple`.
+- **Fix:** Call `FilePicker.pickFiles(type: FileType.any)`, validate `.mxl`/`.musicxml`/`.zip` suffixes, and stream-cap `10 MB` per score / `50 MB` per bundle in [FilePickerScoreImporter](../../lib/features/catalog/data/file_picker_score_importer.dart).
+
+## `Isolate.run` breaks `FakeAsync` tests and non-sendable parser doubles
+
+- **Symptom:** Wrapping batch score extraction or parsing in `Isolate.run` stalls `FakeAsync` widget tests and fails on test doubles.
+- **Root cause:** `Isolate.run` leaves the `FakeAsync` zone and rejects closures or non-sendable `ScoreParser` fakes.
+- **Fix:** Parse on the main isolate and yield `Future<void>.delayed(Duration.zero)` every `8` entries in [FilePickerScoreImporter](../../lib/features/catalog/data/file_picker_score_importer.dart) and [ZipBundleScoreExtractor](../../lib/features/catalog/data/zip_bundle_score_extractor.dart).

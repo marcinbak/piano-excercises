@@ -10,6 +10,7 @@ class _FailingCatalogRepository implements CatalogRepository {
   final InMemoryCatalogRepository _delegate;
   bool failCreate = false;
   bool failAttach = false;
+  bool failBatch = false;
 
   @override
   Future<Piece> createPiece(Piece piece) {
@@ -28,6 +29,14 @@ class _FailingCatalogRepository implements CatalogRepository {
       throw const CatalogStorageException('Simulated DB attach failure');
     }
     return _delegate.attachVariant(pieceId: pieceId, variant: variant);
+  }
+
+  @override
+  Future<void> applyBatch(CatalogBatchMutation batch) {
+    if (failBatch) {
+      throw const CatalogStorageException('Simulated DB batch failure');
+    }
+    return _delegate.applyBatch(batch);
   }
 
   @override
@@ -231,5 +240,112 @@ void main() {
     await coordinator.deletePiece(multi.id);
     expect(await repo.queryPieces(), isEmpty);
     expect(await store.purgeOrphans(<String>{}), 0);
+  });
+
+  test('executeBatchImport commits new + attached scores and rolls back all written files on DB or mid-write failure', () async {
+    final existing = await coordinator.createPieceFromCandidate(
+      candidate: _makeCandidate(fileName: 'prelude_easy.mxl'),
+      title: 'Prelude',
+      artist: 'Bach',
+      difficultyTier: DifficultyTier.beginner,
+    );
+
+    ImportedScoreCandidate buildCandidate({
+      required String fileName,
+      required String title,
+      required String artist,
+      required List<int> bytes,
+    }) {
+      final scale = Scale.fromKeySignature(KeySignature.cMajor);
+      final score = Score(
+        title: title,
+        artist: artist,
+        scale: scale,
+        timeSignature: TimeSignature.common,
+        measures: const <ScoreMeasure>[],
+      );
+      return ImportedScoreCandidate(
+        fileName: fileName,
+        bytes: Uint8List.fromList(bytes),
+        parsedScore: ParsedScore(
+          score: score,
+          metadata: ScoreMetadata(
+            title: title,
+            artist: artist,
+            scale: scale,
+            timeSignature: TimeSignature.common,
+            measureCount: 1,
+            sourceFormat: ScoreFormat.mxl,
+          ),
+        ),
+      );
+    }
+
+    final plan = CatalogBatchImportPlanner.plan(
+      existingPieces: <Piece>[existing],
+      candidates: <ImportedScoreCandidate>[
+        buildCandidate(
+          fileName: 'prelude_easy.mxl',
+          title: 'Prelude',
+          artist: 'Bach',
+          bytes: const <int>[1, 2, 3, 4],
+        ),
+        buildCandidate(
+          fileName: 'prelude_advanced.mxl',
+          title: 'Prelude',
+          artist: 'Bach',
+          bytes: const <int>[5, 6, 7],
+        ),
+        buildCandidate(
+          fileName: 'fugue_tier2.mxl',
+          title: 'Fugue',
+          artist: 'Bach',
+          bytes: const <int>[8, 9, 10],
+        ),
+      ],
+    );
+
+    // 1. Repository batch failure rolls back all newly written files while preserving existing piece file.
+    repo.failBatch = true;
+    await expectLater(
+      () => coordinator.executeBatchImport(plan),
+      throwsA(isA<CatalogStorageException>()),
+    );
+    expect(await store.purgeOrphans(await repo.listStoredRelativePaths()), 0);
+    expect(await repo.countPieces(), 1);
+
+    // 2. Mid-batch ScoreFileStore failure (e.g. second candidate has empty bytes) rolls back first file.
+    repo.failBatch = false;
+    final midFailPlan = CatalogBatchImportPlanner.plan(
+      existingPieces: const <Piece>[],
+      candidates: <ImportedScoreCandidate>[
+        buildCandidate(
+          fileName: 'good.mxl',
+          title: 'Good',
+          artist: 'Bach',
+          bytes: const <int>[1, 2, 3],
+        ),
+        buildCandidate(
+          fileName: 'empty.mxl',
+          title: 'Bad',
+          artist: 'Bach',
+          bytes: const <int>[],
+        ),
+      ],
+    );
+    await expectLater(
+      () => coordinator.executeBatchImport(midFailPlan),
+      throwsA(isA<CatalogStorageException>()),
+    );
+    expect(await store.purgeOrphans(await repo.listStoredRelativePaths()), 0);
+
+    // 3. Clean batch commit persists new piece + attachment + skips duplicate.
+    final result = await coordinator.executeBatchImport(plan);
+    expect(result.createdPieceCount, 1);
+    expect(result.attachedVariantCount, 1);
+    expect(result.skippedDuplicateCount, 1);
+    expect(await repo.countPieces(), 2);
+    expect((await repo.getPieceById(existing.id))?.variants, hasLength(2));
+    expect(await store.purgeOrphans(await repo.listStoredRelativePaths()), 0);
   });
 }

@@ -6,7 +6,10 @@ import 'package:piano_exercises/features/catalog/domain/piece.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
-const int _variantBatchSize = 400;
+export 'package:piano_exercises/features/catalog/data/sqlite_catalog_batch_codec.dart'
+    show applyBatchInTxn;
+
+const int catalogSqlBatchSize = 400;
 
 const List<String> pieceColumns = <String>[
   'id',
@@ -59,6 +62,17 @@ const List<String> variantColumns = <String>[
   return (whereSql: whereSql, args: args);
 }
 
+/// Inserts a [Piece] row inside an active SQLite transaction.
+Future<void> insertPieceRow(sqflite.Transaction txn, Piece piece) {
+  return txn.insert('pieces', <String, Object?>{
+    'id': piece.id,
+    'title': piece.title,
+    'artist': piece.artist,
+    'key_fifths': piece.scale.keySignature.fifths,
+    'scale_mode': piece.scale.mode.name,
+  });
+}
+
 /// Inserts a [ScoreVariant] row inside an active SQLite transaction.
 Future<void> insertScoreVariant(sqflite.Transaction txn, ScoreVariant variant) {
   return txn.insert('score_variants', <String, Object?>{
@@ -97,8 +111,8 @@ Future<Map<String, List<ScoreVariant>>> loadVariantsByPiece(
   List<String> pieceIds,
 ) async {
   final grouped = <String, List<ScoreVariant>>{};
-  for (var start = 0; start < pieceIds.length; start += _variantBatchSize) {
-    final end = (start + _variantBatchSize).clamp(0, pieceIds.length);
+  for (var start = 0; start < pieceIds.length; start += catalogSqlBatchSize) {
+    final end = (start + catalogSqlBatchSize).clamp(0, pieceIds.length);
     final chunk = pieceIds.sublist(start, end);
     final placeholders = List<String>.filled(chunk.length, '?').join(', ');
     final rows = await db.query(

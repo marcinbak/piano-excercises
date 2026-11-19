@@ -122,6 +122,31 @@ final class InMemoryCatalogRepository implements CatalogRepository {
   }
 
   @override
+  Future<void> applyBatch(CatalogBatchMutation batch) async {
+    _ensureOpen();
+    if (batch.isEmpty) {
+      return;
+    }
+    _validateBatchMutation(batch);
+    for (final piece in batch.newPieces) {
+      _pieces[piece.id] = piece;
+    }
+    for (final attachment in batch.attachments) {
+      if (attachment.variants.isEmpty) {
+        continue;
+      }
+      final existing = _pieces[attachment.pieceId]!;
+      _pieces[attachment.pieceId] = Piece(
+        id: existing.id,
+        title: existing.title,
+        artist: existing.artist,
+        scale: existing.scale,
+        variants: <ScoreVariant>[...existing.variants, ...attachment.variants],
+      );
+    }
+  }
+
+  @override
   Future<Piece?> deleteVariant({
     required String pieceId,
     required String variantId,
@@ -185,6 +210,57 @@ final class InMemoryCatalogRepository implements CatalogRepository {
       }
     }
     return false;
+  }
+
+  void _validateBatchMutation(CatalogBatchMutation batch) {
+    final seenPieceIds = Set<String>.of(_pieces.keys);
+    final seenVariantIds = <String>{
+      for (final piece in _pieces.values)
+        for (final variant in piece.variants) variant.id,
+    };
+    for (final piece in batch.newPieces) {
+      if (piece.variants.isEmpty) {
+        throw CatalogStorageException('Piece ${piece.id} has zero variants.');
+      }
+      if (!seenPieceIds.add(piece.id)) {
+        throw CatalogStorageException('Piece ${piece.id} already exists.');
+      }
+      _validateBatchVariants(piece.id, piece.variants, seenVariantIds);
+    }
+    for (final attachment in batch.attachments) {
+      if (!_pieces.containsKey(attachment.pieceId)) {
+        throw CatalogStorageException('Piece ${attachment.pieceId} not found.');
+      }
+      if (attachment.variants.isEmpty) {
+        throw CatalogStorageException(
+          'Attachment for ${attachment.pieceId} has zero variants.',
+        );
+      }
+      _validateBatchVariants(
+        attachment.pieceId,
+        attachment.variants,
+        seenVariantIds,
+      );
+    }
+  }
+
+  void _validateBatchVariants(
+    String pieceId,
+    List<ScoreVariant> variants,
+    Set<String> seenVariantIds,
+  ) {
+    for (final variant in variants) {
+      if (variant.pieceId != pieceId) {
+        throw CatalogStorageException(
+          'Variant pieceId ${variant.pieceId} does not match $pieceId.',
+        );
+      }
+      if (!seenVariantIds.add(variant.id)) {
+        throw CatalogStorageException(
+          'ScoreVariant ${variant.id} already exists.',
+        );
+      }
+    }
   }
 
   static bool _matchesSearch(Piece piece, List<String> queryTokens) {

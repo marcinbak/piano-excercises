@@ -1,8 +1,22 @@
+import 'package:piano_exercises/features/catalog/domain/catalog_batch_import_planner.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_repository.dart';
 import 'package:piano_exercises/features/catalog/domain/difficulty_tier.dart';
 import 'package:piano_exercises/features/catalog/domain/piece.dart';
 import 'package:piano_exercises/features/catalog/domain/score_file_store.dart';
 import 'package:piano_exercises/features/catalog/domain/score_import_source.dart';
+
+/// Summary counts returned after a committed batch import.
+final class CatalogBatchImportResult {
+  const CatalogBatchImportResult({
+    required this.createdPieceCount,
+    required this.attachedVariantCount,
+    required this.skippedDuplicateCount,
+  });
+
+  final int createdPieceCount;
+  final int attachedVariantCount;
+  final int skippedDuplicateCount;
+}
 
 /// Coordinates atomic score-file storage and catalog repository mutations.
 final class CatalogImportCoordinator {
@@ -104,6 +118,115 @@ final class CatalogImportCoordinator {
       await _rollbackFile(storedRelativePath);
       rethrow;
     }
+  }
+
+  /// Writes all planned score payloads first, commits one repository batch, and unlinks all written files on failure.
+  Future<CatalogBatchImportResult> executeBatchImport(
+    CatalogBatchImportPlan plan,
+  ) async {
+    if (!plan.hasImports) {
+      return CatalogBatchImportResult(
+        createdPieceCount: 0,
+        attachedVariantCount: 0,
+        skippedDuplicateCount: plan.skippedDuplicates.length,
+      );
+    }
+
+    final writtenPaths = <String>[];
+    try {
+      final mutation = await _stageBatchMutation(plan, writtenPaths);
+      await catalogRepository.applyBatch(mutation);
+      var attachedVariantCount = 0;
+      for (final attachment in mutation.attachments) {
+        attachedVariantCount += attachment.variants.length;
+      }
+      return CatalogBatchImportResult(
+        createdPieceCount: mutation.newPieces.length,
+        attachedVariantCount: attachedVariantCount,
+        skippedDuplicateCount: plan.skippedDuplicates.length,
+      );
+    } catch (_) {
+      for (final path in writtenPaths) {
+        await _rollbackFile(path);
+      }
+      rethrow;
+    }
+  }
+
+  Future<CatalogBatchMutation> _stageBatchMutation(
+    CatalogBatchImportPlan plan,
+    List<String> writtenPaths,
+  ) async {
+    final importedAtMs = clockMs();
+    final newPieces = <Piece>[];
+    for (final plannedPiece in plan.newPieces) {
+      final pieceId = _nextSafeId('piece');
+      final variants = await _savePlannedVariants(
+        pieceId: pieceId,
+        plannedVariants: plannedPiece.variants,
+        importedAtMs: importedAtMs,
+        writtenPaths: writtenPaths,
+      );
+      newPieces.add(
+        Piece(
+          id: pieceId,
+          title: plannedPiece.title,
+          artist: plannedPiece.artist,
+          scale: plannedPiece.scale,
+          variants: variants,
+        ),
+      );
+    }
+    final attachments = <CatalogBatchPieceAttachment>[];
+    for (final plannedAttachment in plan.attachments) {
+      final variants = await _savePlannedVariants(
+        pieceId: plannedAttachment.targetPiece.id,
+        plannedVariants: plannedAttachment.variants,
+        importedAtMs: importedAtMs,
+        writtenPaths: writtenPaths,
+      );
+      attachments.add(
+        CatalogBatchPieceAttachment(
+          pieceId: plannedAttachment.targetPiece.id,
+          variants: variants,
+        ),
+      );
+    }
+    return CatalogBatchMutation(newPieces: newPieces, attachments: attachments);
+  }
+
+  Future<List<ScoreVariant>> _savePlannedVariants({
+    required String pieceId,
+    required List<PlannedBatchVariant> plannedVariants,
+    required int importedAtMs,
+    required List<String> writtenPaths,
+  }) async {
+    final variants = <ScoreVariant>[];
+    for (final planned in plannedVariants) {
+      final variantId = _nextSafeId('variant');
+      final metadata = planned.candidate.parsedScore.metadata;
+      final storedRelativePath = await scoreFileStore.saveScoreBytes(
+        variantId: variantId,
+        format: metadata.sourceFormat,
+        bytes: planned.candidate.bytes,
+      );
+      writtenPaths.add(storedRelativePath);
+      variants.add(
+        ScoreVariant(
+          id: variantId,
+          pieceId: pieceId,
+          difficultyTier: planned.difficultyTier,
+          label: _resolveVariantLabel(
+            planned.labelOverride,
+            planned.difficultyTier,
+          ),
+          fileName: planned.effectiveFileName,
+          storedRelativePath: storedRelativePath,
+          importedAtMs: importedAtMs,
+        ),
+      );
+    }
+    return variants;
   }
 
   Future<Piece?> deleteVariant({

@@ -123,13 +123,7 @@ final class SqliteCatalogRepository implements CatalogRepository {
   Future<Piece> createPiece(Piece piece) async {
     try {
       return await _db.transaction((txn) async {
-        await txn.insert('pieces', <String, Object?>{
-          'id': piece.id,
-          'title': piece.title,
-          'artist': piece.artist,
-          'key_fifths': piece.scale.keySignature.fifths,
-          'scale_mode': piece.scale.mode.name,
-        });
+        await insertPieceRow(txn, piece);
         for (final variant in piece.variants) {
           await insertScoreVariant(txn, variant);
         }
@@ -138,6 +132,22 @@ final class SqliteCatalogRepository implements CatalogRepository {
       });
     } on sqflite.DatabaseException catch (error) {
       throw CatalogStorageException('Failed to create piece: $error');
+    }
+  }
+
+  @override
+  Future<void> applyBatch(CatalogBatchMutation batch) async {
+    if (batch.isEmpty) {
+      return;
+    }
+    try {
+      await _db.transaction(
+        (txn) => applyBatchInTxn(txn, batch, ftsDialect: _dialect),
+      );
+    } on CatalogStorageException {
+      rethrow;
+    } on sqflite.DatabaseException catch (error) {
+      throw CatalogStorageException('Failed to apply catalog batch: $error');
     }
   }
 
