@@ -54,16 +54,15 @@ final class MusicXmlScoreParser implements ScoreParser {
       );
     }
 
-    final measureInputs = _parsePartMeasures(partElements);
-    final initialScale = _resolveInitialScale(measureInputs);
-    final initialTime =
-        measureInputs.first.timeSignature ?? TimeSignature.common;
-    final timelineInputs = measureInputs
-        .map((m) => m.timeline)
-        .toList(growable: false);
-
     final Score score;
     try {
+      final measureInputs = _parsePartMeasures(partElements);
+      final initialScale = _resolveInitialScale(measureInputs);
+      final initialTime =
+          measureInputs.first.timeSignature ?? TimeSignature.common;
+      final timelineInputs = measureInputs
+          .map((m) => m.timeline)
+          .toList(growable: false);
       score = ScoreTimelineReducer.reduce(
         title: title,
         artist: artist,

@@ -195,11 +195,11 @@ TempoMark? _parseSoundTempo(XmlElement soundEl) {
   if (rawTempo == null) {
     return null;
   }
-  final bpm = double.tryParse(rawTempo)?.round();
-  if (bpm == null || bpm < 1 || bpm > 999) {
+  final parsed = double.tryParse(rawTempo);
+  if (parsed == null || !parsed.isFinite || parsed < 0.5 || parsed > 999.4) {
     throw ScoreParseException('Invalid <sound tempo="$rawTempo">.');
   }
-  return TempoMark(bpm);
+  return TempoMark(parsed.round());
 }
 
 TempoMark _parseMetronomeTempo(XmlElement metronomeEl) {
@@ -207,7 +207,7 @@ TempoMark _parseMetronomeTempo(XmlElement metronomeEl) {
   final perMinute = perMinuteText == null
       ? null
       : double.tryParse(perMinuteText);
-  if (perMinute == null) {
+  if (perMinute == null || !perMinute.isFinite || perMinute <= 0) {
     throw ScoreParseException(
       'Invalid <metronome><per-minute>: $perMinuteText',
     );
@@ -219,11 +219,13 @@ TempoMark _parseMetronomeTempo(XmlElement metronomeEl) {
     throw const ScoreParseException('Unsupported >2 <beat-unit-dot> marks.');
   }
   final dotScale = ((1 << (dots + 1)) - 1) / (1 << dots);
-  final bpm = (perMinute * base.quarterBeats.toDouble * dotScale).round();
-  if (bpm < 1 || bpm > 999) {
-    throw ScoreParseException('Out-of-range metronome tempo: $bpm BPM.');
+  final scaledBpm = perMinute * base.quarterBeats.toDouble * dotScale;
+  if (!scaledBpm.isFinite || scaledBpm < 0.5 || scaledBpm > 999.4) {
+    throw ScoreParseException(
+      'Out-of-range metronome tempo: $perMinuteText BPM.',
+    );
   }
-  return TempoMark(bpm);
+  return TempoMark(scaledBpm.round());
 }
 
 void _applyCursorShift(
@@ -236,10 +238,13 @@ void _applyCursorShift(
     throw const ScoreParseException('Missing <divisions> before cursor shift.');
   }
   final durText = xmlChildText(shiftEl, 'duration');
-  final ticks = durText == null ? null : int.tryParse(durText);
-  if (ticks == null || ticks <= 0) {
-    throw ScoreParseException('Invalid shift <duration>: $durText');
+  if (durText == null) {
+    throw const ScoreParseException('Missing shift <duration>.');
   }
+  final ticks = parseMusicXmlDurationTicks(
+    durText,
+    context: forward ? '<forward>' : '<backup>',
+  );
   final delta = RationalBeats(ticks, divisions);
   if (forward) {
     ctx.cursor = ctx.cursor + delta;

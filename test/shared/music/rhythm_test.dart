@@ -30,6 +30,28 @@ void main() {
       expect(() => third - half, throwsRangeError);
       expect(() => half * -1, throwsRangeError);
     });
+
+    test('handles large denominators via BigInt without silent overflow', () {
+      final a = RationalBeats(1, 3037000493);
+      final b = RationalBeats(1, 3037000499);
+      final sum = a + b;
+      expect(sum.numerator, 6074000992);
+      expect(sum.denominator, 9223372012704246007);
+      // Subtraction cross-multiplication exceeds 2^63-1 transiently, then reduces back.
+      expect(sum - b, a);
+
+      final x = RationalBeats(1, 4000000000);
+      final y = RationalBeats(1, 4000000001);
+      expect(x.compareTo(y), greaterThan(0));
+      expect(y < x, isTrue);
+
+      // Reduced denominator exceeding signed 64-bit max throws RangeError.
+      expect(
+        () => RationalBeats(1, 3037000499) + RationalBeats(1, 3037000501),
+        throwsRangeError,
+      );
+      expect(() => RationalBeats(1 << 62) * 4, throwsRangeError);
+    });
   });
 
   group('DurationValue', () {

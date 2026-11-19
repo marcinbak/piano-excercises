@@ -192,7 +192,7 @@ void main() {
       </direction>
       <note><grace/><pitch><step>D</step><octave>5</octave></pitch><type>eighth</type><staff>1</staff></note>
       <note><pitch><step>F</step><alter>2</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><accidental>double-sharp</accidental><staff>1</staff></note>
-      <note><pitch><step>F</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>
+      <note><pitch><step>F</step><alter>2</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><staff>1</staff></note>
       <note><pitch><step>B</step><alter>-2</alter><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type><accidental>flat-flat</accidental><staff>1</staff></note>
       <note><pitch><step>C</step><octave>5</octave></pitch><duration>2</duration><tie type="start"/><voice>1</voice><type>quarter</type><staff>1</staff></note>
       <backup><duration>8</duration></backup>
@@ -281,6 +281,54 @@ void main() {
             .title,
         'Untitled',
       );
+    });
+
+    test('treats omitted <alter> as natural 0 and suppresses unwritten accidental on tied continuation', () {
+      const gMajorNaturalsXml = '''<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>1</divisions>
+        <key><fifths>1</fifths></key>
+        <time><beats>3</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type><accidental>natural</accidental></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><tie type="start"/><type>quarter</type><notations><tied type="start"/></notations></note>
+    </measure>
+    <measure number="2">
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>3</duration><tie type="stop"/><type>half</type><dot/><notations><tied type="stop"/></notations></note>
+    </measure>
+  </part>
+</score-partwise>''';
+
+      final parsed = parser.parseBytes(_utf8(gMajorNaturalsXml));
+      expect(parsed.score.scale.label, 'G Major');
+      final m1 = parsed.score.measures[0];
+      expect(m1.slices, hasLength(3));
+      expect(m1.slices[0].trebleNotes.single.staffNote.pitchName, 'F4');
+      expect(m1.slices[0].trebleNotes.single.midiNote.number, 65);
+      expect(m1.slices[0].trebleNotes.single.showAccidental, isTrue);
+
+      // Omitted <alter> without <accidental> stays natural F4 (MIDI 65).
+      expect(m1.slices[1].trebleNotes.single.staffNote.pitchName, 'F4');
+      expect(m1.slices[1].trebleNotes.single.midiNote.number, 65);
+      expect(m1.slices[1].trebleNotes.single.showAccidental, isFalse);
+
+      expect(m1.slices[2].trebleNotes.single.staffNote.pitchName, 'F4');
+      expect(m1.slices[2].trebleNotes.single.midiNote.number, 65);
+      expect(m1.slices[2].trebleNotes.single.showAccidental, isFalse);
+      expect(m1.slices[2].trebleNotes.single.requiresAttack, isTrue);
+
+      // Tied across barline with omitted <alter> -> F4 (MIDI 65), no unwritten accidental, no attack.
+      final m2Note = parsed.score.measures[1].slices.single.trebleNotes.single;
+      expect(m2Note.staffNote.pitchName, 'F4');
+      expect(m2Note.midiNote.number, 65);
+      expect(m2Note.showAccidental, isFalse);
+      expect(m2Note.requiresAttack, isFalse);
     });
   });
 
@@ -424,6 +472,71 @@ void main() {
         () => parser.parseBytes(_utf8('<score-partwise $attrs/>')),
         throwsA(isA<ScoreParseException>()),
       );
+
+      // Huge unclosed '&' payload fails fast in O(n) without quadratic scan.
+      final stopwatch = Stopwatch()..start();
+      final unclosedAmps = '&' * 200000;
+      expect(
+        () => parser.parseBytes(
+          _utf8(
+            '<score-partwise><work><work-title>$unclosedAmps</work-title></work>'
+            '<part id="P1"><measure number="1"><note><rest measure="yes"/></note></measure></part></score-partwise>',
+          ),
+        ),
+        throwsA(isA<ScoreParseException>()),
+      );
+      expect(
+        () => parser.parseBytes(
+          _utf8(
+            '<score-partwise><work><work-title>&${'a' * 200000}</work-title></work>'
+            '<part id="P1"><measure number="1"><note><rest measure="yes"/></note></measure></part></score-partwise>',
+          ),
+        ),
+        throwsA(isA<ScoreParseException>()),
+      );
+      stopwatch.stop();
+      expect(stopwatch.elapsedMilliseconds, lessThan(2000));
+
+      // Max int64 <duration> ticks on note / backup / forward reject cleanly with ScoreParseException.
+      for (final giantDurationSnippet in <String>[
+        '<note><pitch><step>C</step><octave>4</octave></pitch><duration>9223372036854775807</duration></note>',
+        '<forward><duration>9223372036854775807</duration></forward>',
+        '<backup><duration>9223372036854775807</duration></backup>',
+      ]) {
+        expect(
+          () => parser.parseBytes(
+            _utf8(
+              '<score-partwise><part id="P1"><measure number="1">'
+              '<attributes><divisions>1</divisions></attributes>'
+              '$giantDurationSnippet'
+              '</measure></part></score-partwise>',
+            ),
+          ),
+          throwsA(isA<ScoreParseException>()),
+        );
+      }
+
+      // Non-finite or huge tempo values reject cleanly with ScoreParseException.
+      for (final badTempoSnippet in <String>[
+        '<sound tempo="NaN"/>',
+        '<sound tempo="Infinity"/>',
+        '<sound tempo="1e309"/>',
+        '<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>NaN</per-minute></metronome></direction-type></direction>',
+        '<direction><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>1e309</per-minute></metronome></direction-type></direction>',
+      ]) {
+        expect(
+          () => parser.parseBytes(
+            _utf8(
+              '<score-partwise><part id="P1"><measure number="1">'
+              '<attributes><divisions>1</divisions></attributes>'
+              '$badTempoSnippet'
+              '<note><rest measure="yes"/></note>'
+              '</measure></part></score-partwise>',
+            ),
+          ),
+          throwsA(isA<ScoreParseException>()),
+        );
+      }
     });
   });
 }

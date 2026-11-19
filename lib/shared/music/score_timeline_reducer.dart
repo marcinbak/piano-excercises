@@ -212,8 +212,10 @@ abstract final class ScoreTimelineReducer {
     final resolvedAccidental = input.explicitAlter != null
         ? Accidental.fromSemitoneDelta(input.explicitAlter!)
         : (input.writtenAccidental ?? currentActive);
-    final showAccidental =
-        input.writtenAccidental != null || resolvedAccidental != currentActive;
+    final showAccidental = input.tie.requiresAttack
+        ? (input.writtenAccidental != null ||
+              resolvedAccidental != currentActive)
+        : input.writtenAccidental != null;
     activeAlterations[key] = resolvedAccidental;
 
     return ScoreNote(

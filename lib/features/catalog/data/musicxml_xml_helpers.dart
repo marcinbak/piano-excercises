@@ -27,6 +27,20 @@ String? xmlChildText(XmlElement parent, String localName) {
   return text.isEmpty ? null : text;
 }
 
+/// Maximum accepted MusicXML `<duration>` tick value (`16384 * 128`).
+const int maxMusicXmlDurationTicks = 16384 * 128;
+
+/// Parses and bounds-checks a MusicXML `<duration>` integer tick value.
+int parseMusicXmlDurationTicks(String raw, {required String context}) {
+  final ticks = int.tryParse(raw);
+  if (ticks == null || ticks < 1 || ticks > maxMusicXmlDurationTicks) {
+    throw ScoreParseException(
+      'Invalid $context <duration> (expected 1..$maxMusicXmlDurationTicks): $raw',
+    );
+  }
+  return ticks;
+}
+
 /// Maps MusicXML `<type>` / `<beat-unit>` strings to [NoteBaseDuration].
 NoteBaseDuration parseMusicXmlBaseDuration(String type) {
   return switch (type) {

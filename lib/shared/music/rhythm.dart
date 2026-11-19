@@ -27,31 +27,41 @@ final class RationalBeats implements Comparable<RationalBeats> {
   double get toDouble => numerator / denominator;
 
   RationalBeats operator +(RationalBeats other) {
-    final divisor = _gcd(denominator, other.denominator);
-    final leftFactor = other.denominator ~/ divisor;
-    final rightFactor = denominator ~/ divisor;
-    return RationalBeats(
-      (numerator * leftFactor) + (other.numerator * rightFactor),
-      leftFactor * denominator,
+    final aDen = BigInt.from(denominator);
+    final bDen = BigInt.from(other.denominator);
+    final divisor = aDen.gcd(bDen);
+    final leftFactor = bDen ~/ divisor;
+    final rightFactor = aDen ~/ divisor;
+    return _fromBigInt(
+      (BigInt.from(numerator) * leftFactor) +
+          (BigInt.from(other.numerator) * rightFactor),
+      leftFactor * aDen,
     );
   }
 
   RationalBeats operator -(RationalBeats other) {
-    final divisor = _gcd(denominator, other.denominator);
-    final leftFactor = other.denominator ~/ divisor;
-    final rightFactor = denominator ~/ divisor;
-    final diff = (numerator * leftFactor) - (other.numerator * rightFactor);
-    if (diff < 0) {
+    final aDen = BigInt.from(denominator);
+    final bDen = BigInt.from(other.denominator);
+    final divisor = aDen.gcd(bDen);
+    final leftFactor = bDen ~/ divisor;
+    final rightFactor = aDen ~/ divisor;
+    final diff =
+        (BigInt.from(numerator) * leftFactor) -
+        (BigInt.from(other.numerator) * rightFactor);
+    if (diff.isNegative) {
       throw RangeError('RationalBeats subtraction cannot be negative.');
     }
-    return RationalBeats(diff, leftFactor * denominator);
+    return _fromBigInt(diff, leftFactor * aDen);
   }
 
   RationalBeats operator *(int factor) {
     if (factor < 0) {
       throw RangeError.value(factor, 'factor', 'must be non-negative');
     }
-    return RationalBeats(numerator * factor, denominator);
+    return _fromBigInt(
+      BigInt.from(numerator) * BigInt.from(factor),
+      BigInt.from(denominator),
+    );
   }
 
   bool operator <(RationalBeats other) => compareTo(other) < 0;
@@ -64,9 +74,9 @@ final class RationalBeats implements Comparable<RationalBeats> {
 
   @override
   int compareTo(RationalBeats other) {
-    return (numerator * other.denominator).compareTo(
-      other.numerator * denominator,
-    );
+    final left = BigInt.from(numerator) * BigInt.from(other.denominator);
+    final right = BigInt.from(other.numerator) * BigInt.from(denominator);
+    return left.compareTo(right);
   }
 
   @override
@@ -83,6 +93,19 @@ final class RationalBeats implements Comparable<RationalBeats> {
   @override
   String toString() =>
       denominator == 1 ? '$numerator' : '$numerator/$denominator';
+
+  static RationalBeats _fromBigInt(BigInt numerator, BigInt denominator) {
+    if (numerator == BigInt.zero) {
+      return const RationalBeats.zero();
+    }
+    final divisor = numerator.gcd(denominator);
+    final reducedNum = numerator ~/ divisor;
+    final reducedDen = denominator ~/ divisor;
+    if (!reducedNum.isValidInt || !reducedDen.isValidInt) {
+      throw RangeError('RationalBeats exceeds 64-bit integer precision.');
+    }
+    return RationalBeats._(reducedNum.toInt(), reducedDen.toInt());
+  }
 
   static int _gcd(int a, int b) {
     var x = a;

@@ -68,10 +68,12 @@ void parseMusicXmlNoteElement(XmlElement noteEl, MeasureTimelineCursor ctx) {
   if (pitchEl == null) {
     throw const ScoreParseException('<note> missing <pitch> or <rest>.');
   }
-  final (step, octave, explicitAlter) = parseMusicXmlPitch(pitchEl);
+  final (step, octave, parsedAlter) = parseMusicXmlPitch(pitchEl);
   final writtenAccidental = parseMusicXmlAccidental(
     xmlChildText(noteEl, 'accidental'),
   );
+  // MusicXML 4.0 defines omitted <alter> as 0 semitones (natural).
+  final explicitAlter = parsedAlter ?? writtenAccidental?.semitoneDelta ?? 0;
   final tie = parseMusicXmlTie(noteEl);
   final beamGroupId = _parseBeamGroup(noteEl, ctx, clef: clef, voice: voice);
 
@@ -136,10 +138,7 @@ DurationValue _parseDuration(
     if (divisions == null) {
       throw const ScoreParseException('Missing <divisions> before <duration>.');
     }
-    final ticks = int.tryParse(durText);
-    if (ticks == null || ticks <= 0) {
-      throw ScoreParseException('Invalid <note><duration>: $durText');
-    }
+    final ticks = parseMusicXmlDurationTicks(durText, context: '<note>');
     beats = RationalBeats(ticks, divisions);
   } else if (isMeasureRest) {
     beats = ctx.activeTimeSignature.measureQuarterBeats;

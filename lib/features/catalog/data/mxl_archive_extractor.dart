@@ -45,6 +45,10 @@ final class MxlArchiveExtractor {
       );
     }
 
+    MxlEntryValidator.validateCentralDirectoryBounds(
+      bytes,
+      maxEntries: maxEntries,
+    );
     final directory = _readDirectory(bytes);
     if (directory.fileHeaders.isEmpty ||
         directory.fileHeaders.length > maxEntries ||

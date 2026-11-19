@@ -6,6 +6,48 @@ final class StrictXmlEntityMapping extends XmlEntityMapping {
   const StrictXmlEntityMapping();
 
   static const XmlEntityMapping _encoder = XmlDefaultEntityMapping.xml();
+  static const int _maxEntityLength = 16;
+
+  @override
+  String decode(String input) {
+    var start = input.indexOf('&');
+    if (start < 0) {
+      return input;
+    }
+    final buffer = StringBuffer(input.substring(0, start));
+    while (true) {
+      final endLimit = start + 1 + _maxEntityLength;
+      final limit = endLimit < input.length ? endLimit : input.length;
+      var semiIndex = -1;
+      for (var i = start + 1; i < limit; i += 1) {
+        final unit = input.codeUnitAt(i);
+        if (unit == 0x26) {
+          throw const ScoreParseException(
+            'Unclosed XML entity reference before ampersand.',
+          );
+        }
+        if (unit == 0x3B) {
+          semiIndex = i;
+          break;
+        }
+      }
+      if (semiIndex < 0) {
+        throw const ScoreParseException(
+          'Unterminated or oversized XML entity reference.',
+        );
+      }
+      final entity = input.substring(start + 1, semiIndex);
+      buffer.write(decodeEntity(entity)!);
+      final nextAmp = input.indexOf('&', semiIndex + 1);
+      if (nextAmp < 0) {
+        buffer.write(input.substring(semiIndex + 1));
+        break;
+      }
+      buffer.write(input.substring(semiIndex + 1, nextAmp));
+      start = nextAmp;
+    }
+    return buffer.toString();
+  }
 
   @override
   String? decodeEntity(String input) {

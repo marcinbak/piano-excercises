@@ -171,6 +171,58 @@ void main() {
       );
     });
 
+    test('rejects spoofed EOCDR entry count, oversized central directory, and ZIP64 before ZipDirectory.read', () {
+      final valid = _encodeMxl(<String, Uint8List>{
+        'META-INF/container.xml': _utf8(_containerXml('score.musicxml')),
+        'score.musicxml': _utf8(sampleScore),
+      });
+      final eocdrPos = _findSignature(valid, <int>[0x50, 0x4B, 0x05, 0x06]);
+      expect(eocdrPos, greaterThan(0));
+
+      // Spoofed EOCDR declaring 50,000 entries.
+      final manyEntries = Uint8List.fromList(valid);
+      manyEntries[eocdrPos + 8] = 50000 & 0xFF;
+      manyEntries[eocdrPos + 9] = (50000 >> 8) & 0xFF;
+      manyEntries[eocdrPos + 10] = 50000 & 0xFF;
+      manyEntries[eocdrPos + 11] = (50000 >> 8) & 0xFF;
+      expect(
+        () => extractor.extractMusicXmlBytes(manyEntries),
+        throwsA(isA<ScoreParseException>()),
+      );
+
+      // Central directory declared larger than maxEntries * 1024 even with totalEntries = 1.
+      final hugeCd = Uint8List.fromList(valid);
+      hugeCd[eocdrPos + 8] = 1;
+      hugeCd[eocdrPos + 9] = 0;
+      hugeCd[eocdrPos + 10] = 1;
+      hugeCd[eocdrPos + 11] = 0;
+      _writeUint32Le(hugeCd, eocdrPos + 12, 33 * 1024);
+      expect(
+        () => extractor.extractMusicXmlBytes(hugeCd),
+        throwsA(isA<ScoreParseException>()),
+      );
+
+      // ZIP64 sentinel in totalEntries (0xFFFF).
+      final zip64Sentinel = Uint8List.fromList(valid);
+      zip64Sentinel[eocdrPos + 10] = 0xFF;
+      zip64Sentinel[eocdrPos + 11] = 0xFF;
+      expect(
+        () => extractor.extractMusicXmlBytes(zip64Sentinel),
+        throwsA(isA<ScoreParseException>()),
+      );
+
+      // ZIP64 EOCDR locator signature (0x07064b50) directly preceding EOCDR.
+      final zip64Locator = Uint8List.fromList(valid);
+      zip64Locator[eocdrPos - 20] = 0x50;
+      zip64Locator[eocdrPos - 19] = 0x4B;
+      zip64Locator[eocdrPos - 18] = 0x06;
+      zip64Locator[eocdrPos - 17] = 0x07;
+      expect(
+        () => extractor.extractMusicXmlBytes(zip64Locator),
+        throwsA(isA<ScoreParseException>()),
+      );
+    });
+
     test('rejects unsafe paths in ZIP entries and container.xml full-path', () {
       const badPaths = <String>[
         '../evil.musicxml',
