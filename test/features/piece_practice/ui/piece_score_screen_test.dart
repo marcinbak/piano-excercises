@@ -763,5 +763,147 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+
+    testWidgets(
+      'retains pause across AsyncLoading score resolution while MidiConnectionScreen is open and guards loop-sheet double taps',
+      (tester) async {
+        final midiRepo = _FakeMidiRepository();
+        final delayedStore = _CompleterScoreFileStore();
+        addTearDown(midiRepo.dispose);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              midiRepositoryProvider.overrideWithValue(midiRepo),
+              scoreFileStoreProvider.overrideWithValue(delayedStore),
+              scoreParserProvider.overrideWithValue(
+                const MusicXmlScoreParser(),
+              ),
+            ],
+            child: MaterialApp(
+              home: PieceScoreScreen(piece: piece, initialVariant: vSimple),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey<String>('score_loading_indicator')),
+          findsOneWidget,
+        );
+
+        // Open MidiConnectionScreen while variantScoreProvider is still AsyncLoading.
+        await tester.tap(
+          find.byKey(const ValueKey<String>('midi-status-button')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(MidiConnectionScreen), findsOneWidget);
+
+        // Resolve score behind MidiConnectionScreen -> controller mounts paused.
+        delayedStore.readCompleter.complete(simpleBytes);
+        await tester.pumpAndSettle();
+
+        // Wrong & matching MIDI inputs on MidiInputCheckCard must NOT affect practice.
+        midiRepo.noteEventsController.add(_noteOn(61));
+        await tester.pump(const Duration(milliseconds: 40));
+        midiRepo.noteEventsController.add(_noteOff(61));
+        midiRepo.noteEventsController.add(_noteOn(67));
+        midiRepo.noteEventsController.add(_noteOn(43));
+        await tester.pump(const Duration(milliseconds: 40));
+        midiRepo.noteEventsController.add(_noteOff(67));
+        midiRepo.noteEventsController.add(_noteOff(43));
+        await tester.pump();
+
+        // Pop back to PieceScoreScreen -> slice stays at 0 with zero wrong overlays.
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.byType(MidiConnectionScreen), findsNothing);
+        expect(_findScorePainter(tester).activeSliceIndex, 0);
+        expect(_findScorePainter(tester).wrongNoteOverlays, isEmpty);
+
+        // Resumes after pop: G4 (67) + G2 (43) advances slice 0 -> slice 1.
+        midiRepo.noteEventsController.add(_noteOn(67));
+        midiRepo.noteEventsController.add(_noteOn(43));
+        await tester.pump(const Duration(milliseconds: 40));
+        midiRepo.noteEventsController.add(_noteOff(67));
+        midiRepo.noteEventsController.add(_noteOff(43));
+        await tester.pump();
+        expect(_findScorePainter(tester).activeSliceIndex, 1);
+
+        // Double-tap score_loop_button opens only one MeasureLoopSheet and unpauses on dismiss.
+        final loopBtn = find.byKey(const ValueKey<String>('score_loop_button'));
+        await tester.tap(loopBtn);
+        await tester.tap(loopBtn, warnIfMissed: false);
+        await tester.pumpAndSettle();
+        expect(find.byType(MeasureLoopSheet), findsOneWidget);
+
+        Navigator.of(tester.element(find.byType(MeasureLoopSheet))).pop();
+        await tester.pumpAndSettle();
+        expect(find.byType(MeasureLoopSheet), findsNothing);
+
+        // Practice resumes cleanly after dismissing MeasureLoopSheet: B4 (71) advances 1 -> 2.
+        midiRepo.noteEventsController.add(_noteOn(71));
+        await tester.pump(const Duration(milliseconds: 40));
+        midiRepo.noteEventsController.add(_noteOff(71));
+        await tester.pump();
+        expect(_findScorePainter(tester).activeSliceIndex, 2);
+
+        // Same-frame overlap (score_loop_button + midi-status-button) keeps pause active until both close.
+        final midiBtn = find.byKey(
+          const ValueKey<String>('midi-status-button'),
+        );
+        tester.widget<ActionChip>(loopBtn).onPressed!();
+        tester.widget<TextButton>(midiBtn).onPressed!();
+        await tester.pumpAndSettle();
+        expect(find.byType(MidiConnectionScreen), findsOneWidget);
+        expect(
+          find.byType(MeasureLoopSheet, skipOffstage: false),
+          findsOneWidget,
+        );
+
+        // Close MidiConnectionScreen -> MeasureLoopSheet remains open and paused.
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(find.byType(MeasureLoopSheet), findsOneWidget);
+        midiRepo.noteEventsController.add(_noteOn(74)); // D5
+        midiRepo.noteEventsController.add(_noteOn(50)); // D3
+        await tester.pump(const Duration(milliseconds: 40));
+        midiRepo.noteEventsController.add(_noteOff(74));
+        midiRepo.noteEventsController.add(_noteOff(50));
+        await tester.pump();
+        expect(_findScorePainter(tester).activeSliceIndex, 2);
+
+        // Dismiss MeasureLoopSheet -> unpauses and evaluates D5 (74) + D3 (50) -> slice 3.
+        Navigator.of(tester.element(find.byType(MeasureLoopSheet))).pop();
+        await tester.pumpAndSettle();
+        midiRepo.noteEventsController.add(_noteOn(74));
+        midiRepo.noteEventsController.add(_noteOn(50));
+        await tester.pump(const Duration(milliseconds: 40));
+        midiRepo.noteEventsController.add(_noteOff(74));
+        midiRepo.noteEventsController.add(_noteOff(50));
+        await tester.pump();
+        expect(_findScorePainter(tester).activeSliceIndex, 3);
+      },
+    );
   });
+}
+
+class _CompleterScoreFileStore implements ScoreFileStore {
+  final Completer<Uint8List> readCompleter = Completer<Uint8List>();
+
+  @override
+  Future<Uint8List> readScoreBytes(String storedRelativePath) =>
+      readCompleter.future;
+
+  @override
+  Future<String> saveScoreBytes({
+    required String variantId,
+    required ScoreFormat format,
+    required Uint8List bytes,
+  }) async => 'scores/$variantId.musicxml';
+
+  @override
+  Future<void> deleteScoreFile(String storedRelativePath) async {}
+
+  @override
+  Future<int> purgeOrphans(Set<String> activeRelativePaths) async => 0;
 }

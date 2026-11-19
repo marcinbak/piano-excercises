@@ -37,7 +37,9 @@ class PieceScoreScreen extends ConsumerStatefulWidget {
 
 class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   late ScoreVariant _selectedVariant;
-  bool _wasPausedBeforeModal = false;
+  int _modalPauseDepth = 0;
+  bool _wasExternallyPausedBeforeModal = false;
+  bool _isOpeningLoopSheet = false;
 
   @override
   void initState() {
@@ -74,6 +76,8 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Retain autoDispose paused state across AsyncLoading before controller mounts.
+    ref.listen<bool>(practicePausedProvider, (_, _) {});
     final effectivePiece =
         ref.watch(livePieceProvider(widget.piece.id)).value ?? widget.piece;
     final activeVariant = _resolveActiveVariant(effectivePiece);
@@ -105,7 +109,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) => _buildScaffoldBody(
-            _PracticeScreenData(
+            PiecePracticeScreenData(
               effectivePiece: effectivePiece,
               activeVariant: activeVariant,
               asyncScore: asyncScore,
@@ -118,7 +122,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     );
   }
 
-  Widget _buildScaffoldBody(_PracticeScreenData data) {
+  Widget _buildScaffoldBody(PiecePracticeScreenData data) {
     final loadedScore = data.asyncScore.value;
     final showHeader =
         loadedScore != null || data.effectivePiece.variants.length > 1;
@@ -198,7 +202,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   }
 
   Widget _buildHeaderStrip({
-    required _PracticeScreenData data,
+    required PiecePracticeScreenData data,
     required HandMode handMode,
     required PieceScoreCursorBarData? cursor,
     required double maxHeaderHeight,
@@ -230,12 +234,18 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   }
 
   void _pauseBeforeModal() {
-    _wasPausedBeforeModal = ref.read(practicePausedProvider);
-    ref.read(practicePausedProvider.notifier).setPaused(true);
+    if (_modalPauseDepth == 0) {
+      _wasExternallyPausedBeforeModal = ref.read(practicePausedProvider);
+      ref.read(practicePausedProvider.notifier).setPaused(true);
+    }
+    _modalPauseDepth += 1;
   }
 
   void _restoreAfterModal() {
-    if (!mounted || _wasPausedBeforeModal) {
+    if (_modalPauseDepth > 0) {
+      _modalPauseDepth -= 1;
+    }
+    if (!mounted || _modalPauseDepth > 0 || _wasExternallyPausedBeforeModal) {
       return;
     }
     ref.read(practicePausedProvider.notifier).setPaused(false);
@@ -246,6 +256,10 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     PracticeSessionState sessionState,
     PiecePracticeController controller,
   ) async {
+    if (_isOpeningLoopSheet) {
+      return;
+    }
+    _isOpeningLoopSheet = true;
     final initialMeasure = sessionState.activeSliceOrdinal == null
         ? 0
         : ScorePracticeNavigator.measureIndexOfSliceOrdinal(
@@ -262,11 +276,19 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
         currentLoop: sessionState.loopRange,
       );
     } finally {
+      _isOpeningLoopSheet = false;
       _restoreAfterModal();
     }
     if (!mounted || result == null) {
       return;
     }
+    _applyLoopSheetResult(result, controller);
+  }
+
+  void _applyLoopSheetResult(
+    MeasureLoopSheetResult result,
+    PiecePracticeController controller,
+  ) {
     switch (result) {
       case MeasureLoopApply(:final range):
         controller.setLoopRange(range);
@@ -281,20 +303,4 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     }
     setState(() => _selectedVariant = variant);
   }
-}
-
-final class _PracticeScreenData {
-  const _PracticeScreenData({
-    required this.effectivePiece,
-    required this.activeVariant,
-    required this.asyncScore,
-    required this.isCompactHeight,
-    required this.maxHeight,
-  });
-
-  final Piece effectivePiece;
-  final ScoreVariant activeVariant;
-  final AsyncValue<Score> asyncScore;
-  final bool isCompactHeight;
-  final double maxHeight;
 }

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:piano_exercises/features/catalog/catalog.dart';
 import 'package:piano_exercises/features/piece_practice/domain/hand_mode.dart';
 import 'package:piano_exercises/features/piece_practice/domain/score_practice_navigator.dart';
 import 'package:piano_exercises/features/piece_practice/state/piece_practice_controller.dart';
@@ -10,6 +11,23 @@ import 'package:piano_exercises/features/piece_practice/ui/piece_score_viewport.
 import 'package:piano_exercises/features/piece_practice/ui/score_notation_mapper.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 import 'package:smufl_notation/smufl_notation.dart';
+
+/// Snapshot passed from [PieceScoreScreen] to body and header helpers.
+final class PiecePracticeScreenData {
+  const PiecePracticeScreenData({
+    required this.effectivePiece,
+    required this.activeVariant,
+    required this.asyncScore,
+    required this.isCompactHeight,
+    required this.maxHeight,
+  });
+
+  final Piece effectivePiece;
+  final ScoreVariant activeVariant;
+  final AsyncValue<Score> asyncScore;
+  final bool isCompactHeight;
+  final double maxHeight;
+}
 
 /// Callbacks and static overlays for [PiecePracticeBody].
 final class PiecePracticeBodyConfig {

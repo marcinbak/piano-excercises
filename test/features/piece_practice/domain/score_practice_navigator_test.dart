@@ -242,5 +242,30 @@ void main() {
         );
       },
     );
+
+    test('measureIndexOfSliceOrdinal resolves first non-empty measure when leading measures have empty slices', () {
+      final sparseScore = Score(
+        title: 'Leading Empty Measure',
+        scale: Scale.fromKeySignature(KeySignature.cMajor),
+        timeSignature: TimeSignature.common,
+        measures: <ScoreMeasure>[
+          ScoreMeasure(measureNumber: 1, slices: const <ScoreSlice>[]),
+          ScoreMeasure(
+            measureNumber: 2,
+            slices: <ScoreSlice>[
+              _slice(
+                index: 0,
+                measureNumber: 2,
+                treble: <ScoreNote>[_note(DiatonicNote.c, 4, Clef.treble)],
+              ),
+            ],
+          ),
+        ],
+      );
+      expect(
+        ScorePracticeNavigator.measureIndexOfSliceOrdinal(sparseScore, 0),
+        1,
+      );
+    });
   });
 }

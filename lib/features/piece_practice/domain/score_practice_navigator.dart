@@ -124,13 +124,14 @@ abstract final class ScorePracticeNavigator {
 
   /// Returns the 0-based measure index in [score.measures] containing [sliceOrdinal].
   static int measureIndexOfSliceOrdinal(Score score, int sliceOrdinal) {
-    if (score.measures.isEmpty || sliceOrdinal <= 0) {
+    if (score.measures.isEmpty || score.slices.isEmpty) {
       return 0;
     }
+    final target = math.max(0, sliceOrdinal);
     var offset = 0;
     for (var i = 0; i < score.measures.length; i += 1) {
       final count = score.measures[i].slices.length;
-      if (count > 0 && sliceOrdinal < offset + count) {
+      if (count > 0 && target < offset + count) {
         return i;
       }
       offset += count;

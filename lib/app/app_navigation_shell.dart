@@ -23,6 +23,7 @@ class AppNavigationShell extends ConsumerStatefulWidget {
 class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
   late AppShellTab _selectedTab;
   bool _wasDrillPausedBeforeModal = false;
+  bool _isOpeningPiece = false;
 
   @override
   void initState() {
@@ -144,6 +145,10 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
   }
 
   Future<void> _openPieceScore(Piece piece, ScoreVariant variant) async {
+    if (_isOpeningPiece) {
+      return;
+    }
+    _isOpeningPiece = true;
     ref.read(drillControllerProvider.notifier).setPaused(true);
     try {
       await Navigator.of(context).push<void>(
@@ -153,6 +158,7 @@ class _AppNavigationShellState extends ConsumerState<AppNavigationShell> {
         ),
       );
     } finally {
+      _isOpeningPiece = false;
       if (mounted) {
         ref
             .read(drillControllerProvider.notifier)
