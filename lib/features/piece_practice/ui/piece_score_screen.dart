@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
 import 'package:piano_exercises/features/midi/midi.dart';
-import 'package:piano_exercises/features/piece_practice/domain/hand_mode.dart';
 import 'package:piano_exercises/features/piece_practice/domain/score_practice_navigator.dart';
 import 'package:piano_exercises/features/piece_practice/state/piece_practice_controller.dart';
 import 'package:piano_exercises/features/piece_practice/state/piece_score_providers.dart';
@@ -13,6 +12,7 @@ import 'package:piano_exercises/features/piece_practice/state/practice_session_s
 import 'package:piano_exercises/features/piece_practice/ui/measure_loop_sheet.dart';
 import 'package:piano_exercises/features/piece_practice/ui/piece_practice_body.dart';
 import 'package:piano_exercises/features/piece_practice/ui/piece_score_header_bar.dart';
+import 'package:piano_exercises/features/piece_practice/ui/piece_score_header_strip.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 import 'package:smufl_notation/smufl_notation.dart';
 
@@ -24,22 +24,28 @@ class PieceScoreScreen extends ConsumerStatefulWidget {
     this.initialVariant,
     this.initialScore,
     this.wrongNoteOverlays = const <WrongNoteOverlay>[],
+    this.onEditVariant,
   });
 
   final Piece piece;
   final ScoreVariant? initialVariant;
   final Score? initialScore;
   final List<WrongNoteOverlay> wrongNoteOverlays;
+  final Future<void> Function(Piece piece, ScoreVariant variant)? onEditVariant;
 
   @override
   ConsumerState<PieceScoreScreen> createState() => _PieceScoreScreenState();
 }
 
 class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
+  static int _nextRouteId = 1;
+
+  late final int _routeId = _nextRouteId++;
   late ScoreVariant _selectedVariant;
   int _modalPauseDepth = 0;
   bool _wasExternallyPausedBeforeModal = false;
   bool _isOpeningLoopSheet = false;
+  bool _isOpeningEditor = false;
 
   @override
   void initState() {
@@ -78,6 +84,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   Widget build(BuildContext context) {
     // Retain autoDispose paused state across AsyncLoading before controller mounts.
     ref.listen<bool>(practicePausedProvider, (_, _) {});
+    ref.listen<bool>(practiceRoutePausedProvider(_routeId), (_, _) {});
     final effectivePiece =
         ref.watch(livePieceProvider(widget.piece.id)).value ?? widget.piece;
     final activeVariant = _resolveActiveVariant(effectivePiece);
@@ -100,6 +107,14 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: <Widget>[
+          if (widget.onEditVariant != null && widget.initialScore == null)
+            IconButton(
+              key: const ValueKey<String>('piece-score-edit-button'),
+              tooltip: 'Edit arrangement',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () =>
+                  unawaited(_openEditor(effectivePiece, activeVariant)),
+            ),
           MidiStatusActionButton(
             onBeforeOpen: _pauseBeforeModal,
             onAfterClose: _restoreAfterModal,
@@ -136,6 +151,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
         : PracticeSessionKey(
             variantId: data.activeVariant.id,
             score: loadedScore,
+            routeId: _routeId,
           );
     final sessionState = sessionKey == null
         ? null
@@ -148,16 +164,30 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         if (showHeader) ...<Widget>[
-          _buildHeaderStrip(
+          PieceScoreHeaderStrip(
             data: data,
-            handMode: handMode,
-            cursor: _buildCursorOrNull(
-              loadedScore,
-              handMode,
-              sessionState,
-              controller,
+            variantControl: PieceScoreVariantControl(
+              selectedVariant: data.activeVariant,
+              onSelectVariant: _selectVariant,
+            ),
+            handControl: PieceScoreHandControl(
+              handMode: handMode,
+              onSelectHandMode: (mode) =>
+                  ref.read(practiceHandModeProvider.notifier).setMode(mode),
             ),
             maxHeaderHeight: maxHeaderHeight,
+            cursor: buildPieceScoreCursorOrNull(
+              loadedScore: loadedScore,
+              handMode: handMode,
+              sessionState: sessionState,
+              controller: controller,
+              onOpenLoopSheet:
+                  loadedScore == null || loadedScore.measures.isEmpty
+                  ? null
+                  : () => unawaited(
+                      _openLoopSheet(loadedScore, sessionState!, controller!),
+                    ),
+            ),
           ),
           const Divider(height: 1),
         ],
@@ -179,64 +209,11 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     );
   }
 
-  PieceScoreCursorBarData? _buildCursorOrNull(
-    Score? loadedScore,
-    HandMode handMode,
-    PracticeSessionState? sessionState,
-    PiecePracticeController? controller,
-  ) {
-    if (loadedScore == null || sessionState == null || controller == null) {
-      return null;
-    }
-    return buildPieceScoreCursorBarData(
-      score: loadedScore,
-      handMode: handMode,
-      sessionState: sessionState,
-      controller: controller,
-      onOpenLoopSheet: loadedScore.measures.isEmpty
-          ? null
-          : () => unawaited(
-              _openLoopSheet(loadedScore, sessionState, controller),
-            ),
-    );
-  }
-
-  Widget _buildHeaderStrip({
-    required PiecePracticeScreenData data,
-    required HandMode handMode,
-    required PieceScoreCursorBarData? cursor,
-    required double maxHeaderHeight,
-  }) {
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: maxHeaderHeight),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          12,
-          data.isCompactHeight ? 4 : 8,
-          12,
-          data.isCompactHeight ? 4 : 8,
-        ),
-        child: PieceScoreHeaderBar(
-          piece: data.effectivePiece,
-          variantControl: PieceScoreVariantControl(
-            selectedVariant: data.activeVariant,
-            onSelectVariant: _selectVariant,
-          ),
-          handControl: PieceScoreHandControl(
-            handMode: handMode,
-            onSelectHandMode: (mode) =>
-                ref.read(practiceHandModeProvider.notifier).setMode(mode),
-          ),
-          cursor: cursor,
-        ),
-      ),
-    );
-  }
-
   void _pauseBeforeModal() {
     if (_modalPauseDepth == 0) {
-      _wasExternallyPausedBeforeModal = ref.read(practicePausedProvider);
-      ref.read(practicePausedProvider.notifier).setPaused(true);
+      final routePaused = ref.read(practiceRoutePausedProvider(_routeId));
+      _wasExternallyPausedBeforeModal = routePaused;
+      ref.read(practiceRoutePausedProvider(_routeId).notifier).setPaused(true);
     }
     _modalPauseDepth += 1;
   }
@@ -248,7 +225,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     if (!mounted || _modalPauseDepth > 0 || _wasExternallyPausedBeforeModal) {
       return;
     }
-    ref.read(practicePausedProvider.notifier).setPaused(false);
+    ref.read(practiceRoutePausedProvider(_routeId).notifier).setPaused(false);
   }
 
   Future<void> _openLoopSheet(
@@ -302,5 +279,19 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
       return;
     }
     setState(() => _selectedVariant = variant);
+  }
+
+  Future<void> _openEditor(Piece piece, ScoreVariant variant) async {
+    if (_isOpeningEditor || widget.onEditVariant == null) {
+      return;
+    }
+    _isOpeningEditor = true;
+    _pauseBeforeModal();
+    try {
+      await widget.onEditVariant!(piece, variant);
+    } finally {
+      _isOpeningEditor = false;
+      _restoreAfterModal();
+    }
   }
 }

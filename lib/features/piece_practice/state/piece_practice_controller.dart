@@ -14,10 +14,12 @@ export 'package:piano_exercises/features/piece_practice/state/piece_score_provid
     show
         PracticeHandModeNotifier,
         PracticePausedNotifier,
+        PracticeRoutePausedNotifier,
         practiceChordWindowProvider,
         practiceClockMsProvider,
         practiceHandModeProvider,
-        practicePausedProvider;
+        practicePausedProvider,
+        practiceRoutePausedProvider;
 
 /// Orchestrates polyphonic Wait-Mode evaluation, cursor advancement, and measure loops.
 class PiecePracticeController extends Notifier<PracticeSessionState> {
@@ -36,7 +38,7 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
       clockMs: ref.watch(practiceClockMsProvider),
       onFlush: _onChordFlush,
     );
-    _coalescer.setPaused(ref.read(practicePausedProvider));
+    _coalescer.setPaused(_computeEffectivePaused());
     _bindListeners();
     return PracticeSessionState.initial(
       arg.score,
@@ -139,7 +141,12 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
       _coalescer.dispose();
     });
 
-    ref.listen<bool>(practicePausedProvider, (_, paused) => setPaused(paused));
+    ref.listen<bool>(practicePausedProvider, (_, _) {
+      setPaused(_computeEffectivePaused());
+    });
+    ref.listen<bool>(practiceRoutePausedProvider(arg.routeId), (_, _) {
+      setPaused(_computeEffectivePaused());
+    });
     ref.listen<AsyncValue<List<MidiDeviceInfo>>>(midiDevicesProvider, (
       _,
       next,
@@ -185,6 +192,10 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
     }
     state = outcome.nextState;
   }
+
+  bool _computeEffectivePaused() =>
+      ref.read(practicePausedProvider) ||
+      ref.read(practiceRoutePausedProvider(arg.routeId));
 }
 
 final piecePracticeControllerProvider = NotifierProvider.autoDispose

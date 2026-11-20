@@ -1,4 +1,5 @@
 export 'clef.dart' show Clef;
+export 'key_pitch_speller.dart' show KeyPitchSpeller;
 export 'key_signature.dart' show KeySignature, Scale, ScaleMode;
 export 'midi_note.dart' show MidiNote;
 export 'pitch_class.dart' show Accidental, DiatonicNote, PitchClass;

@@ -1,4 +1,5 @@
 import 'package:piano_exercises/features/catalog/domain/catalog_query.dart';
+import 'package:piano_exercises/features/catalog/domain/difficulty_tier.dart';
 import 'package:piano_exercises/features/catalog/domain/piece.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
@@ -40,6 +41,33 @@ final class CatalogBatchMutation {
   bool get isEmpty => newPieces.isEmpty && attachments.isEmpty;
 }
 
+/// Atomic update payload modifying a piece's metadata and one [ScoreVariant] row.
+final class CatalogVariantUpdate {
+  const CatalogVariantUpdate({
+    required this.pieceId,
+    required this.variantId,
+    required this.title,
+    required this.artist,
+    required this.scale,
+    required this.difficultyTier,
+    required this.label,
+    required this.fileName,
+    required this.storedRelativePath,
+    required this.importedAtMs,
+  });
+
+  final String pieceId;
+  final String variantId;
+  final String title;
+  final String artist;
+  final Scale scale;
+  final DifficultyTier difficultyTier;
+  final String label;
+  final String fileName;
+  final String storedRelativePath;
+  final int importedAtMs;
+}
+
 /// Boundary contract for querying and mutating persisted catalog pieces.
 abstract interface class CatalogRepository {
   Future<List<Piece>> queryPieces([CatalogQuery query = const CatalogQuery()]);
@@ -56,6 +84,8 @@ abstract interface class CatalogRepository {
     required String pieceId,
     required ScoreVariant variant,
   });
+
+  Future<Piece> updateVariant(CatalogVariantUpdate update);
 
   Future<void> applyBatch(CatalogBatchMutation batch);
 

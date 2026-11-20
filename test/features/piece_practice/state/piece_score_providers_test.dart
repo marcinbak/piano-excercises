@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
 import 'package:piano_exercises/features/piece_practice/piece_practice.dart';
+import 'package:piano_exercises/shared/music/music.dart';
 
 void main() {
   group('variantScoreProvider', () {
@@ -115,5 +116,86 @@ void main() {
         );
       },
     );
+
+    test('invalidates cached variantScoreProvider when catalogMutationVersionProvider bumps', () async {
+      final store = InMemoryScoreFileStore();
+      final repo = InMemoryCatalogRepository();
+      var nextId = 0;
+      final container = ProviderContainer(
+        overrides: [
+          catalogRepositoryProvider.overrideWith((ref) {
+            ref.onDispose(repo.close);
+            return repo;
+          }),
+          scoreFileStoreProvider.overrideWithValue(store),
+          scoreParserProvider.overrideWithValue(const MusicXmlScoreParser()),
+          scoreSerializerProvider.overrideWithValue(
+            const MusicXmlScoreSerializer(),
+          ),
+          catalogIdGeneratorProvider.overrideWithValue(() => 'inv_${++nextId}'),
+          // Constant clock tests cache invalidation even if variant timestamp didn't change.
+          catalogClockMsProvider.overrideWithValue(() => 1000),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      Score singleNoteScore(DiatonicNote note) => ScoreTimelineReducer.reduce(
+        title: 'Cache Test',
+        initialScale: Scale.fromKeySignature(KeySignature.cMajor),
+        initialTimeSignature: TimeSignature.common,
+        measures: <MeasureTimelineInput>[
+          MeasureTimelineInput(
+            measureNumber: 1,
+            notes: <NoteTimelineInput>[
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: note,
+                octave: 4,
+                beatOffset: const RationalBeats.zero(),
+                duration: DurationValue(base: NoteBaseDuration.whole),
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final controller = container.read(catalogControllerProvider.notifier);
+      final created = await controller.saveScoreAsNewPiece(
+        score: singleNoteScore(DiatonicNote.c),
+        details: const CatalogScoreSaveDetails(
+          title: 'Cache Test',
+          difficultyTier: DifficultyTier.beginner,
+        ),
+      );
+      final variant = created!.variants.single;
+
+      final sub = container.listen(variantScoreProvider(variant), (_, _) {});
+      addTearDown(sub.close);
+
+      final firstParsed = await container.read(
+        variantScoreProvider(variant).future,
+      );
+      expect(
+        firstParsed.score.slices.first.trebleNotes.single.staffNote.note,
+        DiatonicNote.c,
+      );
+
+      await controller.updateVariantScore(
+        existingVariant: variant,
+        score: singleNoteScore(DiatonicNote.g),
+        details: const CatalogScoreSaveDetails(
+          title: 'Cache Test',
+          difficultyTier: DifficultyTier.beginner,
+        ),
+      );
+
+      final reloaded = await container.read(
+        variantScoreProvider(variant).future,
+      );
+      expect(
+        reloaded.score.slices.first.trebleNotes.single.staffNote.note,
+        DiatonicNote.g,
+      );
+    });
   });
 }

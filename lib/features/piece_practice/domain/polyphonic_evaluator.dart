@@ -116,85 +116,11 @@ abstract final class PolyphonicEvaluator {
       < 60 => Clef.bass,
       _ => referenceClef,
     };
-    final diatonicMatch = _spellDiatonicInKey(
+    return KeyPitchSpeller.spellMidiNote(
       midiNote,
-      clef,
-      activeKeySignature,
-    );
-    if (diatonicMatch != null) {
-      return diatonicMatch;
-    }
-
-    if (midiNote.isNatural) {
-      return StaffNote(
-        note: midiNote.naturalNote!,
-        octave: midiNote.octave,
-        clef: clef,
-        accidental: Accidental.natural,
-      );
-    }
-
-    final (DiatonicNote note, Accidental accidental) = _spellBlackKey(
-      midiNote.pitchClass,
-      preferFlats: activeKeySignature.fifths < 0,
-    );
-    return StaffNote(
-      note: note,
-      octave: midiNote.octave,
       clef: clef,
-      accidental: accidental,
+      keySignature: activeKeySignature,
     );
-  }
-
-  static StaffNote? _spellDiatonicInKey(
-    MidiNote midiNote,
-    Clef clef,
-    KeySignature keySignature,
-  ) {
-    final baseOctave = midiNote.octave;
-    for (var oct = baseOctave - 1; oct <= baseOctave + 1; oct += 1) {
-      if (oct < -2 || oct > 10) {
-        continue;
-      }
-      for (final note in DiatonicNote.values) {
-        final accidental = keySignature.defaultAccidentalFor(note);
-        final number =
-            ((oct + 1) * 12) + note.semitoneOffset + accidental.semitoneDelta;
-        if (number == midiNote.number) {
-          return StaffNote(
-            note: note,
-            octave: oct,
-            clef: clef,
-            accidental: accidental,
-          );
-        }
-      }
-    }
-    return null;
-  }
-
-  static (DiatonicNote, Accidental) _spellBlackKey(
-    PitchClass pitchClass, {
-    required bool preferFlats,
-  }) {
-    if (preferFlats) {
-      return switch (pitchClass) {
-        PitchClass.cSharp => (DiatonicNote.d, Accidental.flat),
-        PitchClass.dSharp => (DiatonicNote.e, Accidental.flat),
-        PitchClass.fSharp => (DiatonicNote.g, Accidental.flat),
-        PitchClass.gSharp => (DiatonicNote.a, Accidental.flat),
-        PitchClass.aSharp => (DiatonicNote.b, Accidental.flat),
-        _ => (pitchClass.naturalNote!, Accidental.natural),
-      };
-    }
-    return switch (pitchClass) {
-      PitchClass.cSharp => (DiatonicNote.c, Accidental.sharp),
-      PitchClass.dSharp => (DiatonicNote.d, Accidental.sharp),
-      PitchClass.fSharp => (DiatonicNote.f, Accidental.sharp),
-      PitchClass.gSharp => (DiatonicNote.g, Accidental.sharp),
-      PitchClass.aSharp => (DiatonicNote.a, Accidental.sharp),
-      _ => (pitchClass.naturalNote!, Accidental.natural),
-    };
   }
 }
 

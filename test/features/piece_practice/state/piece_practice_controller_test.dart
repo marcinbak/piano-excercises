@@ -344,4 +344,95 @@ void main() {
       expect(sub.read().status, PracticeSessionStatus.completed);
     },
   );
+
+  testWidgets(
+    'isolates practiceRoutePausedProvider per routeId while still honoring global practicePausedProvider',
+    (tester) async {
+      final repo = _FakeMidiRepository();
+      addTearDown(repo.dispose);
+
+      final score = ScoreTimelineReducer.reduce(
+        title: 'Route Pause Test',
+        initialScale: Scale.fromKeySignature(KeySignature.cMajor),
+        initialTimeSignature: TimeSignature.common,
+        measures: <MeasureTimelineInput>[
+          MeasureTimelineInput(
+            measureNumber: 1,
+            notes: <NoteTimelineInput>[
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.c,
+                octave: 4,
+                explicitAlter: 0,
+                beatOffset: const RationalBeats.zero(),
+                duration: DurationValue(base: NoteBaseDuration.quarter),
+              ),
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.d,
+                octave: 4,
+                explicitAlter: 0,
+                beatOffset: RationalBeats(1),
+                duration: DurationValue(base: NoteBaseDuration.quarter),
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final container = ProviderContainer(
+        overrides: [
+          midiRepositoryProvider.overrideWithValue(repo),
+          practiceChordWindowProvider.overrideWithValue(
+            const Duration(milliseconds: 20),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      final parentKey = PracticeSessionKey(
+        variantId: 'v1',
+        score: score,
+        routeId: 101,
+      );
+      final previewKey = PracticeSessionKey(
+        variantId: 'v1',
+        score: score,
+        routeId: 102,
+      );
+      final parentSub = container.listen(
+        piecePracticeControllerProvider(parentKey),
+        (_, _) {},
+      );
+      final previewSub = container.listen(
+        piecePracticeControllerProvider(previewKey),
+        (_, _) {},
+      );
+      addTearDown(parentSub.close);
+      addTearDown(previewSub.close);
+
+      // Pause route 101 only -> route 102 still evaluates MIDI Note On.
+      container.read(practiceRoutePausedProvider(101).notifier).setPaused(true);
+      repo.noteEventsController.add(_noteOn(60));
+      await tester.pump(const Duration(milliseconds: 25));
+      expect(parentSub.read().activeSliceOrdinal, 0);
+      expect(previewSub.read().activeSliceOrdinal, 1);
+
+      // Global practicePausedProvider pauses all routes even after route 101 unpauses.
+      container.read(practicePausedProvider.notifier).setPaused(true);
+      container
+          .read(practiceRoutePausedProvider(101).notifier)
+          .setPaused(false);
+      repo.noteEventsController.add(_noteOn(62));
+      await tester.pump(const Duration(milliseconds: 25));
+      expect(parentSub.read().activeSliceOrdinal, 0);
+      expect(previewSub.read().activeSliceOrdinal, 1);
+
+      // Clearing global pause lets both routes advance cleanly.
+      container.read(practicePausedProvider.notifier).setPaused(false);
+      repo.noteEventsController.add(_noteOn(60));
+      await tester.pump(const Duration(milliseconds: 25));
+      expect(parentSub.read().activeSliceOrdinal, 1);
+    },
+  );
 }

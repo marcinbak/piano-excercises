@@ -1,6 +1,7 @@
 import 'package:piano_exercises/features/catalog/domain/catalog_query.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_repository.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_search_normalizer.dart';
+import 'package:piano_exercises/features/catalog/domain/in_memory_catalog_helpers.dart';
 import 'package:piano_exercises/features/catalog/domain/piece.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
@@ -26,7 +27,8 @@ final class InMemoryCatalogRepository implements CatalogRepository {
           )) {
         continue;
       }
-      if (searchTokens.isNotEmpty && !_matchesSearch(piece, searchTokens)) {
+      if (searchTokens.isNotEmpty &&
+          !matchesInMemoryCatalogSearch(piece, searchTokens)) {
         continue;
       }
       matches.add(piece);
@@ -122,12 +124,46 @@ final class InMemoryCatalogRepository implements CatalogRepository {
   }
 
   @override
+  Future<Piece> updateVariant(CatalogVariantUpdate update) async {
+    _ensureOpen();
+    final existing = _pieces[update.pieceId];
+    if (existing == null) {
+      throw CatalogStorageException('Piece ${update.pieceId} not found.');
+    }
+    final index = existing.variants.indexWhere((v) => v.id == update.variantId);
+    if (index < 0) {
+      throw CatalogStorageException(
+        'ScoreVariant ${update.variantId} not found on ${update.pieceId}.',
+      );
+    }
+    final nextVariants = List<ScoreVariant>.of(existing.variants);
+    nextVariants[index] = ScoreVariant(
+      id: update.variantId,
+      pieceId: update.pieceId,
+      difficultyTier: update.difficultyTier,
+      label: update.label,
+      fileName: update.fileName,
+      storedRelativePath: update.storedRelativePath,
+      importedAtMs: update.importedAtMs,
+    );
+    final updated = Piece(
+      id: existing.id,
+      title: update.title,
+      artist: update.artist,
+      scale: update.scale,
+      variants: nextVariants,
+    );
+    _pieces[update.pieceId] = updated;
+    return updated;
+  }
+
+  @override
   Future<void> applyBatch(CatalogBatchMutation batch) async {
     _ensureOpen();
     if (batch.isEmpty) {
       return;
     }
-    _validateBatchMutation(batch);
+    validateInMemoryCatalogBatchMutation(_pieces, batch);
     for (final piece in batch.newPieces) {
       _pieces[piece.id] = piece;
     }
@@ -210,73 +246,5 @@ final class InMemoryCatalogRepository implements CatalogRepository {
       }
     }
     return false;
-  }
-
-  void _validateBatchMutation(CatalogBatchMutation batch) {
-    final seenPieceIds = Set<String>.of(_pieces.keys);
-    final seenVariantIds = <String>{
-      for (final piece in _pieces.values)
-        for (final variant in piece.variants) variant.id,
-    };
-    for (final piece in batch.newPieces) {
-      if (piece.variants.isEmpty) {
-        throw CatalogStorageException('Piece ${piece.id} has zero variants.');
-      }
-      if (!seenPieceIds.add(piece.id)) {
-        throw CatalogStorageException('Piece ${piece.id} already exists.');
-      }
-      _validateBatchVariants(piece.id, piece.variants, seenVariantIds);
-    }
-    for (final attachment in batch.attachments) {
-      if (!_pieces.containsKey(attachment.pieceId)) {
-        throw CatalogStorageException('Piece ${attachment.pieceId} not found.');
-      }
-      if (attachment.variants.isEmpty) {
-        throw CatalogStorageException(
-          'Attachment for ${attachment.pieceId} has zero variants.',
-        );
-      }
-      _validateBatchVariants(
-        attachment.pieceId,
-        attachment.variants,
-        seenVariantIds,
-      );
-    }
-  }
-
-  void _validateBatchVariants(
-    String pieceId,
-    List<ScoreVariant> variants,
-    Set<String> seenVariantIds,
-  ) {
-    for (final variant in variants) {
-      if (variant.pieceId != pieceId) {
-        throw CatalogStorageException(
-          'Variant pieceId ${variant.pieceId} does not match $pieceId.',
-        );
-      }
-      if (!seenVariantIds.add(variant.id)) {
-        throw CatalogStorageException(
-          'ScoreVariant ${variant.id} already exists.',
-        );
-      }
-    }
-  }
-
-  static bool _matchesSearch(Piece piece, List<String> queryTokens) {
-    final docIndex = CatalogSearchNormalizer.buildDocumentIndex(
-      title: piece.title,
-      artist: piece.artist,
-      scale: piece.scale,
-      fileNames: piece.variants.map((v) => v.fileName),
-    );
-    if (docIndex.isEmpty) {
-      return false;
-    }
-    final docTokens = docIndex.split(' ');
-    return queryTokens.every(
-      (queryToken) =>
-          docTokens.any((docToken) => docToken.startsWith(queryToken)),
-    );
   }
 }
