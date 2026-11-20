@@ -10,6 +10,7 @@ class PieceScoreViewport extends StatefulWidget {
     super.key,
     required this.score,
     this.activeSliceIndex,
+    this.matchedSliceIndex,
     this.handMode = HandMode.both,
     this.wrongNoteOverlays = const <WrongNoteOverlay>[],
     this.onSliceTapped,
@@ -18,6 +19,7 @@ class PieceScoreViewport extends StatefulWidget {
 
   final Score score;
   final int? activeSliceIndex;
+  final int? matchedSliceIndex;
   final HandMode handMode;
   final List<WrongNoteOverlay> wrongNoteOverlays;
   final ValueChanged<int>? onSliceTapped;
@@ -46,12 +48,16 @@ class _PieceScoreViewportState extends State<PieceScoreViewport> {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final style = ScoreStyle(
       inkColor: colorScheme.onSurface,
       staffLineColor: colorScheme.onSurfaceVariant.withValues(alpha: 0.72),
       cursorColor: colorScheme.primary.withValues(alpha: 0.16),
       errorColor: colorScheme.error,
+      successColor: theme.brightness == Brightness.dark
+          ? const Color(0xFF66BB6A)
+          : const Color(0xFF2E7D32),
       dimmedOpacity: 0.32,
     );
 
@@ -63,6 +69,7 @@ class _PieceScoreViewportState extends State<PieceScoreViewport> {
         score: _notationScore,
         style: style,
         activeSliceIndex: widget.activeSliceIndex,
+        matchedSliceIndex: widget.matchedSliceIndex,
         activeHand: ScoreNotationMapper.mapHandMode(widget.handMode),
         wrongNoteOverlays: widget.wrongNoteOverlays,
         onSliceTapped: widget.onSliceTapped,

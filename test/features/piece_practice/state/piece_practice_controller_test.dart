@@ -205,24 +205,38 @@ void main() {
       repo.noteEventsController.add(_noteOn(64));
       await tester.pump(const Duration(milliseconds: 35));
 
-      // Advances to slice 2 while C4 (60), C3 (48), E4 (64) remain held in carryover.
-      expect(sub.read().activeSliceOrdinal, 2);
+      // Holds matched slice 1 green for 500ms, then advances to slice 2 while keys stay in carryover.
+      expect(sub.read().activeSliceOrdinal, 1);
+      expect(sub.read().isShowingCorrect, isTrue);
       expect(sub.read().completedSlicesCount, 1);
 
-      // Release C3 and E4; keep C4 held (sustained tie-stop) and play G4 (67) -> completes slice 2.
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(sub.read().activeSliceOrdinal, 2);
+      expect(sub.read().isShowingCorrect, isFalse);
+
+      // Release C3 and E4; keep C4 held (sustained tie-stop) and play G4 (67) -> matches slice 2.
       repo.noteEventsController.add(_noteOff(48));
       repo.noteEventsController.add(_noteOff(64));
       repo.noteEventsController.add(_noteOn(67));
       await tester.pump(const Duration(milliseconds: 35));
-      expect(sub.read().activeSliceOrdinal, 3);
+      expect(sub.read().activeSliceOrdinal, 2);
+      expect(sub.read().isShowingCorrect, isTrue);
       expect(sub.read().completedSlicesCount, 2);
 
-      // Play F3 (53) -> reaches final completion without advancing off slice 3.
+      // Fast playing (<500ms): early NoteOn F3 (53) flushes slice 2 -> 3 and matches slice 3.
+      repo.noteEventsController.add(_noteOff(60));
+      repo.noteEventsController.add(_noteOff(67));
+      await tester.pump(const Duration(milliseconds: 100));
       repo.noteEventsController.add(_noteOn(53));
       await tester.pump(const Duration(milliseconds: 35));
+      expect(sub.read().activeSliceOrdinal, 3);
+      expect(sub.read().isShowingCorrect, isTrue);
+      expect(sub.read().completedSlicesCount, 3);
+
+      await tester.pump(const Duration(milliseconds: 500));
       expect(sub.read().status, PracticeSessionStatus.completed);
       expect(sub.read().activeSliceOrdinal, 3);
-      expect(sub.read().completedSlicesCount, 3);
+      expect(sub.read().isShowingCorrect, isFalse);
 
       // Restart returns to first playable slice 1.
       container.read(piecePracticeControllerProvider(key).notifier).restart();
@@ -273,9 +287,14 @@ void main() {
       // Complete slice 2 (G4 = 67) -> 3, then slice 3 (F3 = 53) -> wraps to slice 2!
       repo.noteEventsController.add(_noteOn(67));
       await tester.pump(const Duration(milliseconds: 35));
+      repo.noteEventsController.add(_noteOff(67));
+      await tester.pump(const Duration(milliseconds: 500));
       expect(sub.read().activeSliceOrdinal, 3);
       repo.noteEventsController.add(_noteOn(53));
       await tester.pump(const Duration(milliseconds: 35));
+      repo.noteEventsController.add(_noteOff(53));
+      expect(sub.read().isShowingCorrect, isTrue);
+      await tester.pump(const Duration(milliseconds: 500));
       expect(sub.read().status, PracticeSessionStatus.active);
       expect(sub.read().activeSliceOrdinal, 2);
 
@@ -341,6 +360,8 @@ void main() {
       await tester.pump();
       repo.noteEventsController.add(_noteOn(53));
       await tester.pump(const Duration(milliseconds: 35));
+      expect(sub.read().isShowingCorrect, isTrue);
+      await tester.pump(const Duration(milliseconds: 500));
       expect(sub.read().status, PracticeSessionStatus.completed);
     },
   );

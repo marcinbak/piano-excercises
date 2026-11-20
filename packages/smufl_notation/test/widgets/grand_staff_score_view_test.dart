@@ -70,6 +70,7 @@ void main() {
       final painter = GrandStaffScorePainter(
         layout: layout,
         activeSliceIndex: 1,
+        matchedSliceIndex: 1,
         dimmedClef: SmuflClef.treble,
         visibleRect: const Rect.fromLTWH(0, 0, 420, 320),
         wrongNoteOverlays: <WrongNoteOverlay>[
@@ -92,6 +93,13 @@ void main() {
           ),
         ],
       );
+      final unmatchedPainter = GrandStaffScorePainter(
+        layout: layout,
+        activeSliceIndex: 1,
+        dimmedClef: SmuflClef.treble,
+        visibleRect: const Rect.fromLTWH(0, 0, 420, 320),
+      );
+      expect(painter.shouldRepaint(unmatchedPainter), isTrue);
       painter.paint(canvas, layout.totalSize);
       final picture = recorder.endRecording();
       picture.dispose();

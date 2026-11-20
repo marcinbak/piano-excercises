@@ -51,7 +51,9 @@ abstract final class ScorePainterChordRenderer {
     final sp = system.staffSpace;
     final ledgerColor = isDimmed
         ? style.staffLineColor.withValues(alpha: style.dimmedOpacity)
-        : style.staffLineColor;
+        : (glyphStyle.color == style.successColor
+              ? style.successColor
+              : style.staffLineColor);
     final ledgerPaint = Paint()
       ..color = ledgerColor
       ..strokeWidth = math.max(1.0, sp * 0.10);

@@ -25,6 +25,11 @@ final practiceChordWindowProvider = Provider<Duration>((ref) {
   return const Duration(milliseconds: 35);
 });
 
+/// Green confirmation hold duration before advancing to the next score slice.
+final practiceSuccessHoldDurationProvider = Provider<Duration>((ref) {
+  return const Duration(milliseconds: 500);
+});
+
 /// Monotonic millisecond clock used by [PiecePracticeController]; overridable in tests.
 final practiceClockMsProvider = Provider<int Function()>((ref) {
   final stopwatch = Stopwatch()..start();

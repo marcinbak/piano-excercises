@@ -12,7 +12,7 @@ import 'package:piano_exercises/features/piece_practice/state/piece_score_provid
 import 'package:piano_exercises/features/piece_practice/state/practice_session_state.dart';
 import 'package:piano_exercises/features/piece_practice/ui/measure_loop_sheet.dart';
 import 'package:piano_exercises/features/piece_practice/ui/piece_practice_body.dart';
-import 'package:piano_exercises/features/piece_practice/ui/piece_score_header_bar.dart';
+import 'package:piano_exercises/features/piece_practice/ui/piece_score_fullscreen_view.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 import 'package:smufl_notation/smufl_notation.dart';
 
@@ -40,38 +40,40 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   int _modalPauseDepth = 0;
   bool _wasExternallyPausedBeforeModal = false;
   bool _isOpeningLoopSheet = false;
+  PieceScoreFullscreenState _fullscreen = const PieceScoreFullscreenState();
 
   @override
   void initState() {
     super.initState();
-    _selectedVariant = _resolveInitialVariant(widget.piece);
+    _selectedVariant = _matchVariant(widget.piece, widget.initialVariant?.id);
   }
 
   @override
   void didUpdateWidget(covariant PieceScoreScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.piece.id != widget.piece.id) {
-      _selectedVariant = _resolveInitialVariant(widget.piece);
+      _selectedVariant = _matchVariant(widget.piece, widget.initialVariant?.id);
     }
   }
 
-  ScoreVariant _resolveInitialVariant(Piece piece) {
-    final candidate = widget.initialVariant;
-    if (candidate != null && piece.variants.any((v) => v.id == candidate.id)) {
-      return candidate;
+  @override
+  void dispose() {
+    if (_fullscreen.isFullscreen) {
+      // Restore OS bars when route pops directly out of fullscreen mode.
+      unawaited(setFullscreenSystemUiMode(fullscreen: false));
     }
-    return piece.variants.first;
+    super.dispose();
   }
 
-  ScoreVariant _resolveActiveVariant(Piece effectivePiece) {
-    for (final variant in effectivePiece.variants) {
-      if (variant.id == _selectedVariant.id) {
-        return variant;
+  ScoreVariant _matchVariant(Piece piece, String? preferredId) {
+    if (preferredId != null) {
+      for (final variant in piece.variants) {
+        if (variant.id == preferredId) {
+          return variant;
+        }
       }
     }
-    return effectivePiece.variants.isNotEmpty
-        ? effectivePiece.variants.first
-        : _selectedVariant;
+    return piece.variants.isNotEmpty ? piece.variants.first : _selectedVariant;
   }
 
   @override
@@ -80,49 +82,110 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     ref.listen<bool>(practicePausedProvider, (_, _) {});
     final effectivePiece =
         ref.watch(livePieceProvider(widget.piece.id)).value ?? widget.piece;
-    final activeVariant = _resolveActiveVariant(effectivePiece);
-    final useInitialScore =
-        widget.initialScore != null &&
-        activeVariant.id == _resolveInitialVariant(effectivePiece).id;
-    final asyncScore = useInitialScore
+    final activeVariant = _matchVariant(effectivePiece, _selectedVariant.id);
+    final initialId = _matchVariant(
+      effectivePiece,
+      widget.initialVariant?.id,
+    ).id;
+    final asyncScore =
+        (widget.initialScore != null && activeVariant.id == initialId)
         ? AsyncData<Score>(widget.initialScore!)
         : ref
               .watch(variantScoreProvider(activeVariant))
               .whenData((parsed) => parsed.score);
-    final isCompactHeight = MediaQuery.sizeOf(context).height < 480;
-
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: isCompactHeight ? 48 : null,
-        title: Text(
-          effectivePiece.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        actions: <Widget>[
-          MidiStatusActionButton(
-            onBeforeOpen: _pauseBeforeModal,
-            onAfterClose: _restoreAfterModal,
-          ),
-        ],
+    final screenSize = MediaQuery.sizeOf(context);
+    final isCompactHeight = screenSize.height < 480;
+    final session = _watchSession(activeVariant, asyncScore.value);
+    final practiceBody = PiecePracticeBody(
+      asyncScore: asyncScore,
+      handMode: session.handMode,
+      sessionState: session.state,
+      config: PiecePracticeBodyConfig(
+        isCompactHeight: _fullscreen.isFullscreen || isCompactHeight,
+        onRetry: () => ref.invalidate(variantScoreProvider(activeVariant)),
+        controller: session.controller,
+        staticWrongOverlays: widget.wrongNoteOverlays,
       ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) => _buildScaffoldBody(
-            PiecePracticeScreenData(
-              effectivePiece: effectivePiece,
-              activeVariant: activeVariant,
-              asyncScore: asyncScore,
-              isCompactHeight: isCompactHeight,
-              maxHeight: constraints.maxHeight,
-            ),
-          ),
+    );
+
+    return PopScope(
+      canPop: !_fullscreen.isFullscreen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _fullscreen.isFullscreen) {
+          setState(() => _fullscreen = _fullscreen.exit());
+        }
+      },
+      child: Scaffold(
+        appBar: _fullscreen.isFullscreen
+            ? null
+            : _buildAppBar(effectivePiece, asyncScore.hasValue, screenSize),
+        body: SafeArea(
+          child: _fullscreen.isFullscreen
+              ? PieceScoreFullscreenView(
+                  quarterTurns: _fullscreen.effectiveQuarterTurns(screenSize),
+                  onRotateQuarterTurn: () => setState(
+                    () =>
+                        _fullscreen = _fullscreen.rotateQuarterTurn(screenSize),
+                  ),
+                  onExitFullscreen: () =>
+                      setState(() => _fullscreen = _fullscreen.exit()),
+                  child: practiceBody,
+                )
+              : LayoutBuilder(
+                  builder: (_, constraints) => _buildNormalBody(
+                    data: PiecePracticeScreenData(
+                      effectivePiece: effectivePiece,
+                      activeVariant: activeVariant,
+                      asyncScore: asyncScore,
+                      isCompactHeight: isCompactHeight,
+                      maxHeight: constraints.maxHeight,
+                    ),
+                    session: session,
+                    practiceBody: practiceBody,
+                  ),
+                ),
         ),
       ),
     );
   }
 
-  Widget _buildScaffoldBody(PiecePracticeScreenData data) {
+  PreferredSizeWidget _buildAppBar(
+    Piece effectivePiece,
+    bool hasScore,
+    Size screenSize,
+  ) {
+    return AppBar(
+      toolbarHeight: screenSize.height < 480 ? 48 : null,
+      title: Text(
+        effectivePiece.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      actions: <Widget>[
+        PieceScoreFullscreenButton(
+          onPressed: hasScore
+              ? () =>
+                    setState(() => _fullscreen = _fullscreen.enter(screenSize))
+              : null,
+        ),
+        MidiStatusActionButton(
+          onBeforeOpen: _pauseBeforeModal,
+          onAfterClose: _restoreAfterModal,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNormalBody({
+    required PiecePracticeScreenData data,
+    required ({
+      HandMode handMode,
+      PracticeSessionState? state,
+      PiecePracticeController? controller,
+    })
+    session,
+    required Widget practiceBody,
+  }) {
     final loadedScore = data.asyncScore.value;
     final showHeader =
         loadedScore != null || data.effectivePiece.variants.length > 1;
@@ -130,106 +193,62 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
         ? math.max(96.0, data.maxHeight * 0.42)
         : math.max(120.0, data.maxHeight * 0.36);
 
-    final handMode = ref.watch(practiceHandModeProvider);
-    final sessionKey = loadedScore == null
-        ? null
-        : PracticeSessionKey(
-            variantId: data.activeVariant.id,
-            score: loadedScore,
-          );
-    final sessionState = sessionKey == null
-        ? null
-        : ref.watch(piecePracticeControllerProvider(sessionKey));
-    final controller = sessionKey == null
-        ? null
-        : ref.read(piecePracticeControllerProvider(sessionKey).notifier);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
         if (showHeader) ...<Widget>[
-          _buildHeaderStrip(
+          PieceScoreHeaderStrip(
             data: data,
-            handMode: handMode,
-            cursor: _buildCursorOrNull(
-              loadedScore,
-              handMode,
-              sessionState,
-              controller,
+            handMode: session.handMode,
+            onSelectVariant: _selectVariant,
+            onSelectHandMode: (mode) =>
+                ref.read(practiceHandModeProvider.notifier).setMode(mode),
+            cursor: buildPieceScoreCursorBarData(
+              score: loadedScore,
+              handMode: session.handMode,
+              sessionState: session.state,
+              controller: session.controller,
+              onOpenLoopSheet:
+                  (loadedScore == null ||
+                      loadedScore.measures.isEmpty ||
+                      session.state == null ||
+                      session.controller == null)
+                  ? null
+                  : () => unawaited(
+                      _openLoopSheet(
+                        loadedScore,
+                        session.state!,
+                        session.controller!,
+                      ),
+                    ),
             ),
             maxHeaderHeight: maxHeaderHeight,
           ),
           const Divider(height: 1),
         ],
-        Expanded(
-          child: PiecePracticeBody(
-            asyncScore: data.asyncScore,
-            handMode: handMode,
-            sessionState: sessionState,
-            config: PiecePracticeBodyConfig(
-              isCompactHeight: data.isCompactHeight,
-              onRetry: () =>
-                  ref.invalidate(variantScoreProvider(data.activeVariant)),
-              controller: controller,
-              staticWrongOverlays: widget.wrongNoteOverlays,
-            ),
-          ),
-        ),
+        Expanded(child: practiceBody),
       ],
     );
   }
 
-  PieceScoreCursorBarData? _buildCursorOrNull(
-    Score? loadedScore,
+  ({
     HandMode handMode,
-    PracticeSessionState? sessionState,
+    PracticeSessionState? state,
     PiecePracticeController? controller,
-  ) {
-    if (loadedScore == null || sessionState == null || controller == null) {
-      return null;
+  })
+  _watchSession(ScoreVariant activeVariant, Score? loadedScore) {
+    final handMode = ref.watch(practiceHandModeProvider);
+    if (loadedScore == null) {
+      return (handMode: handMode, state: null, controller: null);
     }
-    return buildPieceScoreCursorBarData(
+    final key = PracticeSessionKey(
+      variantId: activeVariant.id,
       score: loadedScore,
-      handMode: handMode,
-      sessionState: sessionState,
-      controller: controller,
-      onOpenLoopSheet: loadedScore.measures.isEmpty
-          ? null
-          : () => unawaited(
-              _openLoopSheet(loadedScore, sessionState, controller),
-            ),
     );
-  }
-
-  Widget _buildHeaderStrip({
-    required PiecePracticeScreenData data,
-    required HandMode handMode,
-    required PieceScoreCursorBarData? cursor,
-    required double maxHeaderHeight,
-  }) {
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxHeight: maxHeaderHeight),
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          12,
-          data.isCompactHeight ? 4 : 8,
-          12,
-          data.isCompactHeight ? 4 : 8,
-        ),
-        child: PieceScoreHeaderBar(
-          piece: data.effectivePiece,
-          variantControl: PieceScoreVariantControl(
-            selectedVariant: data.activeVariant,
-            onSelectVariant: _selectVariant,
-          ),
-          handControl: PieceScoreHandControl(
-            handMode: handMode,
-            onSelectHandMode: (mode) =>
-                ref.read(practiceHandModeProvider.notifier).setMode(mode),
-          ),
-          cursor: cursor,
-        ),
-      ),
+    return (
+      handMode: handMode,
+      state: ref.watch(piecePracticeControllerProvider(key)),
+      controller: ref.read(piecePracticeControllerProvider(key).notifier),
     );
   }
 
@@ -282,13 +301,6 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     if (!mounted || result == null) {
       return;
     }
-    _applyLoopSheetResult(result, controller);
-  }
-
-  void _applyLoopSheetResult(
-    MeasureLoopSheetResult result,
-    PiecePracticeController controller,
-  ) {
     switch (result) {
       case MeasureLoopApply(:final range):
         controller.setLoopRange(range);
@@ -298,9 +310,8 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   }
 
   void _selectVariant(ScoreVariant variant) {
-    if (variant.id == _selectedVariant.id) {
-      return;
+    if (variant.id != _selectedVariant.id) {
+      setState(() => _selectedVariant = variant);
     }
-    setState(() => _selectedVariant = variant);
   }
 }

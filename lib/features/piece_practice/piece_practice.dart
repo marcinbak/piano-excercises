@@ -12,7 +12,8 @@ export 'state/piece_practice_controller.dart'
         practiceChordWindowProvider,
         practiceClockMsProvider,
         practiceHandModeProvider,
-        practicePausedProvider;
+        practicePausedProvider,
+        practiceSuccessHoldDurationProvider;
 export 'state/piece_score_providers.dart'
     show livePieceProvider, variantScoreProvider;
 export 'state/practice_session_state.dart'
@@ -24,6 +25,8 @@ export 'ui/measure_loop_sheet.dart'
         MeasureLoopSheet,
         MeasureLoopSheetResult;
 export 'ui/piece_practice_status_banner.dart' show PiecePracticeStatusBanner;
+export 'ui/piece_score_fullscreen_view.dart'
+    show PieceScoreFullscreenView, defaultFullscreenQuarterTurns;
 export 'ui/piece_score_header_bar.dart'
     show
         PieceScoreCursorBarData,

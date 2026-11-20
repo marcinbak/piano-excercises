@@ -6,6 +6,7 @@ import 'package:piano_exercises/features/drill/domain/drill_session.dart';
 import 'package:piano_exercises/features/drill/domain/note_prompt_selector.dart';
 import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/features/progression/progression.dart';
+import 'package:piano_exercises/shared/music/music.dart';
 
 /// Random index generator used by [NotePromptSelector]; overridable in tests.
 final drillRandomIntProvider = Provider<NextInt>((ref) {
@@ -24,11 +25,18 @@ final drillChordWindowProvider = Provider<Duration>((ref) {
   return const Duration(milliseconds: 35);
 });
 
+/// Green confirmation hold duration before advancing to the next target note.
+final drillSuccessHoldDurationProvider = Provider<Duration>((ref) {
+  return const Duration(milliseconds: 500);
+});
+
 /// Orchestrates active prompts, 35ms chord coalescing, and progression updates.
 class DrillController extends Notifier<DrillSessionState> {
   late NotePromptSelector _selector;
   late int Function() _clockMs;
+  late Duration _successHoldDuration;
   late MidiChordCoalescer _coalescer;
+  Timer? _correctHoldTimer;
   bool _isResetting = false;
 
   bool get isPaused => _coalescer.isPaused;
@@ -38,6 +46,7 @@ class DrillController extends Notifier<DrillSessionState> {
     _isResetting = false;
     _selector = NotePromptSelector(nextInt: ref.watch(drillRandomIntProvider));
     _clockMs = ref.watch(drillClockMsProvider);
+    _successHoldDuration = ref.watch(drillSuccessHoldDurationProvider);
     _coalescer = MidiChordCoalescer(
       chordWindow: ref.watch(drillChordWindowProvider),
       clockMs: _clockMs,
@@ -58,11 +67,16 @@ class DrillController extends Notifier<DrillSessionState> {
     if (!ref.mounted) {
       return;
     }
+    if (paused && state.isShowingCorrect) {
+      _cancelCorrectHoldTimer();
+      _advanceHeldTarget();
+    }
     _coalescer.setPaused(paused);
   }
 
   /// Resets drill progression to Stage 1 and starts a clean prompt.
   void resetSession() {
+    _cancelCorrectHoldTimer();
     _coalescer.resetActivePrompt();
     _isResetting = true;
     try {
@@ -85,6 +99,7 @@ class DrillController extends Notifier<DrillSessionState> {
       _coalescer.onNoteEvent,
     );
     ref.onDispose(() {
+      _cancelCorrectHoldTimer();
       unawaited(noteSubscription.cancel());
       _coalescer.dispose();
     });
@@ -112,6 +127,7 @@ class DrillController extends Notifier<DrillSessionState> {
   }
 
   void _onStageChanged(StageId nextStageId) {
+    _cancelCorrectHoldTimer();
     _coalescer.resetActivePrompt();
     final nextStage = ProgressionCatalog.byId(nextStageId);
     state = DrillSessionState(
@@ -127,7 +143,12 @@ class DrillController extends Notifier<DrillSessionState> {
     if (!ref.mounted || flush.batchNotes.isEmpty) {
       return;
     }
+    if (state.isShowingCorrect) {
+      _coalescer.resetActivePrompt();
+      return;
+    }
 
+    final holdOnCorrect = _successHoldDuration > Duration.zero;
     final progressionNotifier = ref.read(
       progressionControllerProvider.notifier,
     );
@@ -136,13 +157,8 @@ class DrillController extends Notifier<DrillSessionState> {
       playedNotes: flush.batchNotes,
       attemptStartedAtMs: flush.startedAtMs,
       evaluatedAtMs: _clockMs(),
-      selectNextTarget: (previousTarget) {
-        final activeStage = ref.read(progressionControllerProvider).activeStage;
-        return _selector.selectFromPool(
-          activeStage.cumulativeNotes,
-          previous: previousTarget,
-        );
-      },
+      holdOnCorrect: holdOnCorrect,
+      selectNextTarget: _selectNextTarget,
     );
 
     switch (evaluation.result.progressionAction) {
@@ -158,9 +174,45 @@ class DrillController extends Notifier<DrillSessionState> {
       // Carry still-held keys across prompt boundaries so legato releases do
       // not count as chords on the next prompt.
       _coalescer.resetActivePrompt();
+      state = evaluation.nextState;
+      if (holdOnCorrect) {
+        _cancelCorrectHoldTimer();
+        _correctHoldTimer = Timer(_successHoldDuration, _onCorrectHoldComplete);
+      }
+      return;
     }
 
     state = evaluation.nextState;
+  }
+
+  StaffNote _selectNextTarget(StaffNote previousTarget) {
+    final activeStage = ref.read(progressionControllerProvider).activeStage;
+    return _selector.selectFromPool(
+      activeStage.cumulativeNotes,
+      previous: previousTarget,
+    );
+  }
+
+  void _onCorrectHoldComplete() {
+    _correctHoldTimer = null;
+    if (!ref.mounted || !state.isShowingCorrect) {
+      return;
+    }
+    _advanceHeldTarget();
+  }
+
+  void _advanceHeldTarget() {
+    _coalescer.resetActivePrompt();
+    state = DrillEvaluator.completeCorrectHold(
+      state: state,
+      nextTarget: _selectNextTarget(state.targetNote),
+      startedAtMs: _clockMs(),
+    );
+  }
+
+  void _cancelCorrectHoldTimer() {
+    _correctHoldTimer?.cancel();
+    _correctHoldTimer = null;
   }
 }
 

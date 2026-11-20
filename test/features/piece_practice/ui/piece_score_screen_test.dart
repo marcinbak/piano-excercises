@@ -287,10 +287,16 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('Measure 1 / 32'), findsOneWidget);
+        expect(find.text('Both'), findsOneWidget);
+        expect(find.text('Right'), findsNothing);
+        expect(find.text('Left'), findsNothing);
         final initialLayout = _findScorePainter(tester).layout;
 
         await tester.tap(find.byKey(const ValueKey<String>('hand_mode_right')));
         await tester.pump();
+        expect(find.text('Right'), findsOneWidget);
+        expect(find.text('Both'), findsNothing);
+        expect(find.text('Left'), findsNothing);
         expect(_findScorePainter(tester).activeHand, NotationHandFilter.right);
         expect(
           identical(_findScorePainter(tester).layout, initialLayout),
@@ -299,10 +305,14 @@ void main() {
 
         await tester.tap(find.byKey(const ValueKey<String>('hand_mode_left')));
         await tester.pump();
+        expect(find.text('Left'), findsOneWidget);
+        expect(find.text('Right'), findsNothing);
+        expect(find.text('Both'), findsNothing);
         expect(_findScorePainter(tester).activeHand, NotationHandFilter.left);
 
         await tester.tap(find.byKey(const ValueKey<String>('hand_mode_both')));
         await tester.pump();
+        expect(find.text('Both'), findsOneWidget);
         expect(_findScorePainter(tester).activeHand, NotationHandFilter.both);
 
         await tester.tap(
@@ -548,19 +558,26 @@ void main() {
         expect(_findScorePainter(tester).activeSliceIndex, 0);
         expect(_findScorePainter(tester).wrongNoteOverlays, hasLength(1));
 
-        // Correct note C4 (60) clears wrong overlay and advances to slice 1.
+        // Correct note C4 (60) clears wrong overlay, turns slice 0 green for 500ms, then advances to slice 1.
         midiRepo.noteEventsController.add(_noteOn(60));
         await tester.pump(const Duration(milliseconds: 35));
         midiRepo.noteEventsController.add(_noteOff(60));
         await tester.pump();
-        expect(_findScorePainter(tester).activeSliceIndex, 1);
+        expect(_findScorePainter(tester).activeSliceIndex, 0);
+        expect(_findScorePainter(tester).matchedSliceIndex, 0);
         expect(_findScorePainter(tester).wrongNoteOverlays, isEmpty);
 
-        // Correct note E4 (64) completes piece and displays completion banner.
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(_findScorePainter(tester).activeSliceIndex, 1);
+        expect(_findScorePainter(tester).matchedSliceIndex, isNull);
+
+        // Correct note E4 (64) turns slice 1 green for 500ms, then displays completion banner.
         midiRepo.noteEventsController.add(_noteOn(64));
         await tester.pump(const Duration(milliseconds: 35));
         midiRepo.noteEventsController.add(_noteOff(64));
         await tester.pump();
+        expect(_findScorePainter(tester).matchedSliceIndex, 1);
+        await tester.pump(const Duration(milliseconds: 500));
         expect(
           find.byKey(const ValueKey<String>('practice_completed_banner')),
           findsOneWidget,
@@ -754,8 +771,10 @@ void main() {
         // Complete shortScore -> completion banner fits with zero overflow.
         midiRepo.noteEventsController.add(_noteOn(60));
         await tester.pump(const Duration(milliseconds: 35));
+        midiRepo.noteEventsController.add(_noteOff(60));
         midiRepo.noteEventsController.add(_noteOn(64));
         await tester.pump(const Duration(milliseconds: 35));
+        await tester.pump(const Duration(milliseconds: 500));
         expect(
           find.byKey(const ValueKey<String>('practice_completed_banner')),
           findsOneWidget,
@@ -820,13 +839,15 @@ void main() {
         expect(_findScorePainter(tester).activeSliceIndex, 0);
         expect(_findScorePainter(tester).wrongNoteOverlays, isEmpty);
 
-        // Resumes after pop: G4 (67) + G2 (43) advances slice 0 -> slice 1.
+        // Resumes after pop: G4 (67) + G2 (43) turns slice 0 green then advances to slice 1.
         midiRepo.noteEventsController.add(_noteOn(67));
         midiRepo.noteEventsController.add(_noteOn(43));
         await tester.pump(const Duration(milliseconds: 40));
         midiRepo.noteEventsController.add(_noteOff(67));
         midiRepo.noteEventsController.add(_noteOff(43));
         await tester.pump();
+        expect(_findScorePainter(tester).matchedSliceIndex, 0);
+        await tester.pump(const Duration(milliseconds: 500));
         expect(_findScorePainter(tester).activeSliceIndex, 1);
 
         // Double-tap score_loop_button opens only one MeasureLoopSheet and unpauses on dismiss.
@@ -844,7 +865,7 @@ void main() {
         midiRepo.noteEventsController.add(_noteOn(71));
         await tester.pump(const Duration(milliseconds: 40));
         midiRepo.noteEventsController.add(_noteOff(71));
-        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
         expect(_findScorePainter(tester).activeSliceIndex, 2);
 
         // Same-frame overlap (score_loop_button + midi-status-button) keeps pause active until both close.
@@ -880,7 +901,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 40));
         midiRepo.noteEventsController.add(_noteOff(74));
         midiRepo.noteEventsController.add(_noteOff(50));
-        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
         expect(_findScorePainter(tester).activeSliceIndex, 3);
       },
     );

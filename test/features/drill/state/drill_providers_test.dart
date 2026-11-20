@@ -119,8 +119,13 @@ void main() {
         final stats = progression.statsFor(StageId.stage1);
         expect(stats.attempts, i + 1);
         expect(stats.currentStreak, i + 1);
+        expect(drillSub.read().isShowingCorrect, isTrue);
         expect(drillSub.read().lastResult?.status, DrillFeedbackStatus.correct);
         expect(drillSub.read().lastResult?.reactionTimeMs, 150);
+
+        nowMs += 500;
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(drillSub.read().isShowingCorrect, isFalse);
       }
 
       expect(progSub.read().highestUnlockedStageId, StageId.stage2);
@@ -163,7 +168,7 @@ void main() {
       repository.noteEventsController.add(
         _noteEvent(noteNumber: 60, isNoteOn: false),
       );
-      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(progSub.read().statsFor(StageId.stage1).currentStreak, 1);
 
       final heldTarget = drillSub.read().targetNote;
@@ -191,7 +196,7 @@ void main() {
       expect(progSub.read().statsFor(StageId.stage1).currentStreak, 0);
       expect(progSub.read().statsFor(StageId.stage1).attempts, 2);
 
-      // Now clear the held prompt by playing C4 (60): prompt advances, streak stays 0!
+      // Now clear the held prompt by playing C4 (60): holds green 500ms then advances, streak stays 0!
       nowMs += 250;
       repository.noteEventsController.add(
         _noteEvent(noteNumber: 60, isNoteOn: true),
@@ -199,8 +204,13 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 35));
 
-      expect(drillSub.read().targetNote, isNot(heldTarget));
+      expect(drillSub.read().targetNote, heldTarget);
+      expect(drillSub.read().isShowingCorrect, isTrue);
       expect(drillSub.read().wrongPlayedNotes, isEmpty);
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(drillSub.read().targetNote, isNot(heldTarget));
+      expect(drillSub.read().isShowingCorrect, isFalse);
       expect(drillSub.read().lastResult?.status, DrillFeedbackStatus.correct);
       expect(drillSub.read().lastResult?.wasCleanFirstTry, isFalse);
       expect(progSub.read().statsFor(StageId.stage1).currentStreak, 0);
@@ -381,7 +391,20 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 35));
 
+      expect(drillSub.read().isShowingCorrect, isTrue);
       expect(drillSub.read().lastResult?.status, DrillFeedbackStatus.correct);
+
+      // Stray NoteOn during the 500ms green hold is ignored while next note is hidden.
+      repository.noteEventsController.add(
+        _noteEvent(noteNumber: 62, isNoteOn: true),
+      );
+      await tester.pump(const Duration(milliseconds: 35));
+      repository.noteEventsController.add(
+        _noteEvent(noteNumber: 62, isNoteOn: false),
+      );
+      await tester.pump(const Duration(milliseconds: 465));
+
+      expect(drillSub.read().isShowingCorrect, isFalse);
       final nextTarget = drillSub.read().targetNote;
       expect(
         nextTarget,
@@ -403,6 +426,7 @@ void main() {
       expect(drillSub.read().lastResult?.playedNotes, <MidiNote>[
         nextTarget.midiNote,
       ]);
+      await tester.pump(const Duration(milliseconds: 500));
     },
   );
 
@@ -468,6 +492,7 @@ void main() {
       expect(drillSub.read().lastResult?.playedNotes, const <MidiNote>[
         MidiNote(60),
       ]);
+      await tester.pump(const Duration(milliseconds: 500));
     },
   );
 

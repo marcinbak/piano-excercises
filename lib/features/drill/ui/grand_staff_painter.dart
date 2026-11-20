@@ -12,6 +12,8 @@ class GrandStaffPainter extends CustomPainter {
     required this.inkColor,
     required this.errorColor,
     required this.staffLineColor,
+    this.isTargetCorrect = false,
+    this.successColor = const Color(0xFF2E7D32),
   });
 
   static const String _gClefGlyph = '\uE050';
@@ -28,6 +30,8 @@ class GrandStaffPainter extends CustomPainter {
   final Color inkColor;
   final Color errorColor;
   final Color staffLineColor;
+  final bool isTargetCorrect;
+  final Color successColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -44,7 +48,7 @@ class GrandStaffPainter extends CustomPainter {
       size: size,
       note: targetNote,
       centerX: layout.targetNoteX,
-      color: inkColor,
+      color: isTargetCorrect ? successColor : inkColor,
     );
     _paintWrongNotes(canvas, layout, size);
   }
@@ -233,7 +237,9 @@ class GrandStaffPainter extends CustomPainter {
         !_noteListsEqual(oldDelegate.wrongPlayedNotes, wrongPlayedNotes) ||
         oldDelegate.inkColor != inkColor ||
         oldDelegate.errorColor != errorColor ||
-        oldDelegate.staffLineColor != staffLineColor;
+        oldDelegate.staffLineColor != staffLineColor ||
+        oldDelegate.isTargetCorrect != isTargetCorrect ||
+        oldDelegate.successColor != successColor;
   }
 }
 

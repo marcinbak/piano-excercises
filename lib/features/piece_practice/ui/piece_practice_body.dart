@@ -44,6 +44,53 @@ final class PiecePracticeBodyConfig {
   final List<WrongNoteOverlay> staticWrongOverlays;
 }
 
+/// Scroll-bounded header strip hosting [PieceScoreHeaderBar] above the score.
+class PieceScoreHeaderStrip extends StatelessWidget {
+  const PieceScoreHeaderStrip({
+    super.key,
+    required this.data,
+    required this.handMode,
+    required this.onSelectVariant,
+    required this.onSelectHandMode,
+    required this.cursor,
+    required this.maxHeaderHeight,
+  });
+
+  final PiecePracticeScreenData data;
+  final HandMode handMode;
+  final ValueChanged<ScoreVariant> onSelectVariant;
+  final ValueChanged<HandMode> onSelectHandMode;
+  final PieceScoreCursorBarData? cursor;
+  final double maxHeaderHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeaderHeight),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          12,
+          data.isCompactHeight ? 4 : 8,
+          12,
+          data.isCompactHeight ? 4 : 8,
+        ),
+        child: PieceScoreHeaderBar(
+          piece: data.effectivePiece,
+          variantControl: PieceScoreVariantControl(
+            selectedVariant: data.activeVariant,
+            onSelectVariant: onSelectVariant,
+          ),
+          handControl: PieceScoreHandControl(
+            handMode: handMode,
+            onSelectHandMode: onSelectHandMode,
+          ),
+          cursor: cursor,
+        ),
+      ),
+    );
+  }
+}
+
 /// Renders loading, retry error, status banner, and interactive score viewport.
 class PiecePracticeBody extends StatelessWidget {
   const PiecePracticeBody({
@@ -112,6 +159,9 @@ class PiecePracticeBody extends StatelessWidget {
             child: PieceScoreViewport(
               score: score,
               activeSliceIndex: activeSliceIndex,
+              matchedSliceIndex: activeSession.isShowingCorrect
+                  ? activeSliceIndex
+                  : null,
               handMode: handMode,
               wrongNoteOverlays: wrongOverlays,
               onSliceTapped: (tappedSliceIndex) =>
@@ -144,14 +194,17 @@ class PiecePracticeBody extends StatelessWidget {
   }
 }
 
-/// Builds [PieceScoreCursorBarData] for the active [Score] and practice session.
-PieceScoreCursorBarData buildPieceScoreCursorBarData({
-  required Score score,
+/// Builds [PieceScoreCursorBarData] when [score], [sessionState], and [controller] are loaded.
+PieceScoreCursorBarData? buildPieceScoreCursorBarData({
+  required Score? score,
   required HandMode handMode,
-  required PracticeSessionState sessionState,
-  required PiecePracticeController controller,
+  required PracticeSessionState? sessionState,
+  required PiecePracticeController? controller,
   required VoidCallback? onOpenLoopSheet,
 }) {
+  if (score == null || sessionState == null || controller == null) {
+    return null;
+  }
   final activeOrdinal = sessionState.activeSliceOrdinal;
   final loopRange = sessionState.loopRange;
   final currentMeasure = (activeOrdinal == null || score.slices.isEmpty)

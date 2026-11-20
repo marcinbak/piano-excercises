@@ -57,6 +57,7 @@ final class DrillSessionState {
     required this.targetNote,
     required this.promptStartedAtMs,
     this.hasMistakeOnCurrentPrompt = false,
+    this.isShowingCorrect = false,
     List<StaffNote> wrongPlayedNotes = const <StaffNote>[],
     this.lastResult,
   }) : wrongPlayedNotes = List<StaffNote>.unmodifiable(wrongPlayedNotes);
@@ -64,6 +65,7 @@ final class DrillSessionState {
   final StaffNote targetNote;
   final int promptStartedAtMs;
   final bool hasMistakeOnCurrentPrompt;
+  final bool isShowingCorrect;
   final List<StaffNote> wrongPlayedNotes;
   final DrillAttemptResult? lastResult;
 
@@ -74,6 +76,7 @@ final class DrillSessionState {
             other.targetNote == targetNote &&
             other.promptStartedAtMs == promptStartedAtMs &&
             other.hasMistakeOnCurrentPrompt == hasMistakeOnCurrentPrompt &&
+            other.isShowingCorrect == isShowingCorrect &&
             _listEquals(other.wrongPlayedNotes, wrongPlayedNotes) &&
             other.lastResult == lastResult);
   }
@@ -83,6 +86,7 @@ final class DrillSessionState {
     targetNote,
     promptStartedAtMs,
     hasMistakeOnCurrentPrompt,
+    isShowingCorrect,
     Object.hashAll(wrongPlayedNotes),
     lastResult,
   );
@@ -115,6 +119,7 @@ abstract final class DrillEvaluator {
     required int attemptStartedAtMs,
     required int evaluatedAtMs,
     required StaffNote Function(StaffNote previousTarget) selectNextTarget,
+    bool holdOnCorrect = false,
   }) {
     final distinctNotes = playedNotes.toSet().toList(growable: false)..sort();
     if (distinctNotes.isEmpty) {
@@ -160,14 +165,32 @@ abstract final class DrillEvaluator {
           ? DrillProgressionAction.recordCleanHit
           : DrillProgressionAction.none,
     );
-    final nextState = DrillSessionState(
-      targetNote: selectNextTarget(state.targetNote),
-      promptStartedAtMs: evaluatedAtMs,
-      hasMistakeOnCurrentPrompt: false,
-      wrongPlayedNotes: const <StaffNote>[],
-      lastResult: result,
-    );
+    final nextState = holdOnCorrect
+        ? DrillSessionState(
+            targetNote: state.targetNote,
+            promptStartedAtMs: state.promptStartedAtMs,
+            isShowingCorrect: true,
+            lastResult: result,
+          )
+        : DrillSessionState(
+            targetNote: selectNextTarget(state.targetNote),
+            promptStartedAtMs: evaluatedAtMs,
+            lastResult: result,
+          );
     return DrillEvaluation(nextState: nextState, result: result);
+  }
+
+  /// Advances from a green matched hold to [nextTarget] starting at [startedAtMs].
+  static DrillSessionState completeCorrectHold({
+    required DrillSessionState state,
+    required StaffNote nextTarget,
+    required int startedAtMs,
+  }) {
+    return DrillSessionState(
+      targetNote: nextTarget,
+      promptStartedAtMs: startedAtMs,
+      lastResult: state.lastResult,
+    );
   }
 
   static DrillEvaluation _buildMistakeEvaluation({

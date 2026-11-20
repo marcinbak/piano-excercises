@@ -8,14 +8,20 @@ class GrandStaffCard extends StatelessWidget {
     super.key,
     required this.targetNote,
     required this.wrongPlayedNotes,
+    this.isTargetCorrect = false,
   });
 
   final StaffNote targetNote;
   final List<StaffNote> wrongPlayedNotes;
+  final bool isTargetCorrect;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final successColor = theme.brightness == Brightness.dark
+        ? const Color(0xFF66BB6A)
+        : const Color(0xFF2E7D32);
 
     return Card(
       key: const ValueKey<String>('grand-staff-card'),
@@ -34,6 +40,8 @@ class GrandStaffCard extends StatelessWidget {
                 staffLineColor: colorScheme.onSurfaceVariant.withValues(
                   alpha: 0.72,
                 ),
+                isTargetCorrect: isTargetCorrect,
+                successColor: successColor,
               ),
             ),
           ),

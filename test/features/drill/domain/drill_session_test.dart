@@ -237,5 +237,35 @@ void main() {
         expect(cleared.nextState.wrongPlayedNotes, isEmpty);
       },
     );
+
+    test('holdOnCorrect keeps matched target green until completeCorrectHold advances', () {
+      final initial = DrillSessionState(
+        targetNote: trebleC4,
+        promptStartedAtMs: 100,
+      );
+      final held = DrillEvaluator.evaluate(
+        state: initial,
+        playedNotes: const <MidiNote>[MidiNote(60)],
+        attemptStartedAtMs: 250,
+        evaluatedAtMs: 285,
+        holdOnCorrect: true,
+        selectNextTarget: (_) => bassC4,
+      );
+
+      expect(held.nextState.targetNote, trebleC4);
+      expect(held.nextState.isShowingCorrect, isTrue);
+      expect(held.nextState.wrongPlayedNotes, isEmpty);
+      expect(held.nextState.lastResult?.reactionTimeMs, 150);
+
+      final advanced = DrillEvaluator.completeCorrectHold(
+        state: held.nextState,
+        nextTarget: bassC4,
+        startedAtMs: 785,
+      );
+      expect(advanced.targetNote, bassC4);
+      expect(advanced.isShowingCorrect, isFalse);
+      expect(advanced.promptStartedAtMs, 785);
+      expect(advanced.lastResult, held.result);
+    });
   });
 }

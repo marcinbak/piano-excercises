@@ -9,8 +9,8 @@ Replicate the core note-reading drill loop from [MusoPhone Exercise 7](https://m
 1. App renders a target note on the `Bravura` grand staff in [DrillScreen](../lib/features/drill/ui/drill_screen.dart).
 2. User plays a key on a Bluetooth LE MIDI piano.
 3. App coalesces simultaneous Note On events (`35ms`) and checks single-note pitch and octave against the target.
-4. Clean hits advance the prompt and increment streak; mistakes reset streak, hold the target, and draw red wrong notes.
-5. Clearing a missed prompt advances to the next note without incrementing streak.
+4. Clean hits highlight the matched note green (`500ms`), increment streak, and advance the prompt; mistakes reset streak, hold the target, and draw red wrong notes.
+5. Clearing a missed prompt highlights the matched note green (`500ms`) and advances to the next note without incrementing streak.
 
 ## 3. Difficulty Progression
 
@@ -37,7 +37,7 @@ Stage pools live in [progression_stage.dart](../lib/features/progression/domain/
 
 - **BLE-MIDI & Staff Packages:** Integrated `flutter_midi_command` + `flutter_midi_command_ble` in [MidiConnectionScreen](../lib/features/midi/ui/midi_connection_screen.dart) and bundled `Bravura` SMuFL rendering in [DrillScreen](../lib/features/drill/ui/drill_screen.dart); physical iOS BLE-MIDI discovery, connection, and real-time Note On/Off input are verified.
 - **Runtime Score Import (`D1`):** Import `.mxl`/`.musicxml` files, multi-file picks, and `.zip` bundles at runtime with zero bundled scores ([score-import.md](score-import.md)); [catalog.dart](../lib/features/catalog/catalog.dart) provides `SqliteCatalogRepository`, `AppDocsScoreStore`, `CatalogScreen`, and `BatchScoreImportSheet`, and [app_navigation_shell.dart](../lib/app/app_navigation_shell.dart) wires `Drill`/`Catalog` navigation.
-- **SMuFL Engraving Engine (`D2`):** `[M8]` completed production engraving in [smufl_notation.dart](../packages/smufl_notation/lib/smufl_notation.dart) and score rendering in [piece_practice.dart](../lib/features/piece_practice/piece_practice.dart); `[M9]` completed polyphonic Wait-Mode evaluation and measure loops, deferring Tempo & Metronome Mode to `[M10]`.
+- **SMuFL Engraving Engine (`D2`):** `[M8]` completed production engraving in [smufl_notation.dart](../packages/smufl_notation/lib/smufl_notation.dart) and score rendering in [piece_practice.dart](../lib/features/piece_practice/piece_practice.dart); `[M9]` completed polyphonic Wait-Mode evaluation, measure loops, and 90°-rotatable fullscreen score view, deferring Tempo & Metronome Mode to `[M10]`.
 - **Fallback Input:** Decide whether to include an on-screen piano or microphone pitch detection when no MIDI keyboard is connected.
 - **USB-MIDI:** Decide whether to support wired USB-MIDI alongside BLE-MIDI.
 - **Pre-Release Permission Check (Deferred):** Confirm permission with the creators/owners of [MusoPhone](https://musophone.com/tests-new/?exercise=7) before any public release; all credits go to them.
