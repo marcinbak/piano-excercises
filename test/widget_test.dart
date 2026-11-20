@@ -12,6 +12,7 @@ import 'package:piano_exercises/features/drill/drill.dart';
 import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/features/piece_practice/piece_practice.dart';
 import 'package:piano_exercises/features/progression/progression.dart';
+import 'package:piano_exercises/features/score_editor/score_editor.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
 class _StubMidiRepository implements MidiRepository {
@@ -132,6 +133,12 @@ void main() {
             catalogRepositoryProvider.overrideWithValue(catalogRepo),
             scoreFileStoreProvider.overrideWithValue(fileStore),
             scoreParserProvider.overrideWithValue(const MusicXmlScoreParser()),
+            scoreSerializerProvider.overrideWithValue(
+              const MusicXmlScoreSerializer(),
+            ),
+            scoreEditorChordWindowProvider.overrideWithValue(
+              const Duration(milliseconds: 10),
+            ),
             drillRandomIntProvider.overrideWithValue((_) => 0),
           ],
           child: const PianoExercisesApp(),
@@ -197,12 +204,87 @@ void main() {
       expect(find.text('Piece Catalog'), findsOneWidget);
       expect(container.read(drillControllerProvider.notifier).isPaused, isTrue);
 
-      // Switch Catalog -> Drill: DrillController resumes and grades MIDI notes.
+      // Switch Catalog -> Compose: Drill paused, Compose unpaused & receives MIDI notes.
+      await tester.tap(find.byKey(const ValueKey<String>('shell_nav_compose')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ScoreEditorScreen), findsOneWidget);
+      expect(container.read(drillControllerProvider.notifier).isPaused, isTrue);
+      expect(
+        container
+            .read(
+              scoreEditorControllerProvider(ScoreEditorSessionId.composeTab)
+                  .notifier,
+            )
+            .isPaused,
+        isFalse,
+      );
+
+      midiRepo.emitNoteOn(62);
+      await tester.pump(const Duration(milliseconds: 30));
+      midiRepo.emitNoteOff(62);
+      await tester.pump();
+      expect(
+        container
+            .read(
+              scoreEditorControllerProvider(ScoreEditorSessionId.composeTab),
+            )
+            .draft
+            .measures[0]
+            .notes,
+        hasLength(1),
+      );
+
+      // Open MidiConnectionScreen from Compose -> Compose pauses while open, resumes on pop.
+      await tester.tap(
+        find.byKey(const ValueKey<String>('midi-status-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        container
+            .read(
+              scoreEditorControllerProvider(ScoreEditorSessionId.composeTab)
+                  .notifier,
+            )
+            .isPaused,
+        isTrue,
+      );
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(
+        container
+            .read(
+              scoreEditorControllerProvider(ScoreEditorSessionId.composeTab)
+                  .notifier,
+            )
+            .isPaused,
+        isFalse,
+      );
+
+      // Switch Compose -> Drill: Compose pauses & retains draft; Drill resumes and grades MIDI notes.
       await tester.tap(find.byKey(const ValueKey<String>('shell_nav_drill')));
       await tester.pumpAndSettle();
       expect(
+        container
+            .read(
+              scoreEditorControllerProvider(ScoreEditorSessionId.composeTab)
+                  .notifier,
+            )
+            .isPaused,
+        isTrue,
+      );
+      expect(
         container.read(drillControllerProvider.notifier).isPaused,
         isFalse,
+      );
+      expect(
+        container
+            .read(
+              scoreEditorControllerProvider(ScoreEditorSessionId.composeTab),
+            )
+            .draft
+            .measures[0]
+            .notes,
+        hasLength(1),
       );
 
       midiRepo.emitNoteOn(60);
@@ -213,6 +295,42 @@ void main() {
         container.read(drillControllerProvider).lastResult?.status,
         DrillFeedbackStatus.correct,
       );
+
+      // Catalog -> Edit variant round-trip and PieceScoreScreen -> Edit variant round-trip.
+      await tester.tap(find.byKey(const ValueKey<String>('shell_nav_catalog')));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('variant-edit-button-v1')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ScoreEditorScreen), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('editor-open-save-button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('save-title-field')),
+        'Edited Waltz',
+      );
+      await tester.tap(
+        find.byKey(const ValueKey<String>('save-submit-button')),
+      );
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Edited Waltz'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey<String>('open_variant_v1')));
+      await tester.pumpAndSettle();
+      expect(find.byType(PieceScoreScreen), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('piece-score-edit-button')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ScoreEditorScreen), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.byType(PieceScoreScreen), findsOneWidget);
     },
   );
 
@@ -245,6 +363,12 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.byType(NavigationRail), findsOneWidget);
       expect(find.text('Piece Catalog'), findsOneWidget);
+      expect(container.read(drillControllerProvider.notifier).isPaused, isTrue);
+
+      await tester.tap(find.byKey(const ValueKey<String>('shell_nav_compose')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(ScoreEditorScreen), findsOneWidget);
       expect(container.read(drillControllerProvider.notifier).isPaused, isTrue);
 
       await tester.tap(find.byKey(const ValueKey<String>('shell_nav_drill')));

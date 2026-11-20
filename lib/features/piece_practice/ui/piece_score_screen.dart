@@ -24,12 +24,14 @@ class PieceScoreScreen extends ConsumerStatefulWidget {
     this.initialVariant,
     this.initialScore,
     this.wrongNoteOverlays = const <WrongNoteOverlay>[],
+    this.onEditVariant,
   });
 
   final Piece piece;
   final ScoreVariant? initialVariant;
   final Score? initialScore;
   final List<WrongNoteOverlay> wrongNoteOverlays;
+  final Future<void> Function(Piece piece, ScoreVariant variant)? onEditVariant;
 
   @override
   ConsumerState<PieceScoreScreen> createState() => _PieceScoreScreenState();
@@ -40,6 +42,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   int _modalPauseDepth = 0;
   bool _wasExternallyPausedBeforeModal = false;
   bool _isOpeningLoopSheet = false;
+  bool _isOpeningEditor = false;
 
   @override
   void initState() {
@@ -100,6 +103,14 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
           overflow: TextOverflow.ellipsis,
         ),
         actions: <Widget>[
+          if (widget.onEditVariant != null && widget.initialScore == null)
+            IconButton(
+              key: const ValueKey<String>('piece-score-edit-button'),
+              tooltip: 'Edit arrangement',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () =>
+                  unawaited(_openEditor(effectivePiece, activeVariant)),
+            ),
           MidiStatusActionButton(
             onBeforeOpen: _pauseBeforeModal,
             onAfterClose: _restoreAfterModal,
@@ -262,5 +273,19 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
       return;
     }
     setState(() => _selectedVariant = variant);
+  }
+
+  Future<void> _openEditor(Piece piece, ScoreVariant variant) async {
+    if (_isOpeningEditor || widget.onEditVariant == null) {
+      return;
+    }
+    _isOpeningEditor = true;
+    _pauseBeforeModal();
+    try {
+      await widget.onEditVariant!(piece, variant);
+    } finally {
+      _isOpeningEditor = false;
+      _restoreAfterModal();
+    }
   }
 }

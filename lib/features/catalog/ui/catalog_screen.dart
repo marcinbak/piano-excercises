@@ -16,10 +16,12 @@ class CatalogScreen extends ConsumerStatefulWidget {
   const CatalogScreen({
     super.key,
     this.onSelectVariant,
+    this.onEditVariant,
     this.appBarActions = const <Widget>[],
   });
 
   final void Function(Piece piece, ScoreVariant variant)? onSelectVariant;
+  final void Function(Piece piece, ScoreVariant variant)? onEditVariant;
   final List<Widget> appBarActions;
 
   @override
@@ -123,6 +125,7 @@ class _CatalogScreenState extends ConsumerState<CatalogScreen> {
             return PieceCatalogCard(
               piece: piece,
               onSelectVariant: widget.onSelectVariant,
+              onEditVariant: widget.onEditVariant,
               onAttachVariant: () =>
                   unawaited(_startImport(initialTargetPiece: piece)),
               onDeletePiece: () => unawaited(_confirmDeletePiece(piece)),

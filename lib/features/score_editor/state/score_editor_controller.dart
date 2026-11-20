@@ -12,9 +12,11 @@ import 'package:piano_exercises/shared/music/music.dart';
 export 'package:piano_exercises/features/score_editor/state/score_editor_providers.dart'
     show
         ScoreEditorPausedNotifier,
+        ScoreEditorSessionPausedNotifier,
         scoreEditorChordWindowProvider,
         scoreEditorClockMsProvider,
-        scoreEditorPausedProvider;
+        scoreEditorPausedProvider,
+        scoreEditorSessionPausedProvider;
 
 /// Orchestrates MIDI chord entry, touch edits, undo/redo, and variant loading.
 class ScoreEditorController extends Notifier<ScoreEditorState> {
@@ -34,7 +36,7 @@ class ScoreEditorController extends Notifier<ScoreEditorState> {
       clockMs: ref.watch(scoreEditorClockMsProvider),
       onFlush: _onChordFlush,
     );
-    _coalescer.setPaused(ref.read(scoreEditorPausedProvider));
+    _coalescer.setPaused(_computeEffectivePaused());
     _bindListeners();
     return ScoreEditorState.initial();
   }
@@ -237,10 +239,14 @@ class ScoreEditorController extends Notifier<ScoreEditorState> {
       _coalescer.dispose();
     });
 
-    ref.listen<bool>(
-      scoreEditorPausedProvider,
-      (_, paused) => setPaused(paused),
-    );
+    if (arg == ScoreEditorSessionId.composeTab) {
+      ref.listen<bool>(scoreEditorPausedProvider, (_, _) {
+        setPaused(_computeEffectivePaused());
+      });
+    }
+    ref.listen<bool>(scoreEditorSessionPausedProvider(arg), (_, _) {
+      setPaused(_computeEffectivePaused());
+    });
     ref.listen<AsyncValue<List<MidiDeviceInfo>>>(midiDevicesProvider, (
       _,
       next,
@@ -287,6 +293,14 @@ class ScoreEditorController extends Notifier<ScoreEditorState> {
     }
     _coalescer.resetActivePrompt();
     state = state.withCursorMove(nextDraft);
+  }
+
+  bool _computeEffectivePaused() {
+    final tabPaused =
+        arg == ScoreEditorSessionId.composeTab &&
+        ref.read(scoreEditorPausedProvider);
+    final sessionPaused = ref.read(scoreEditorSessionPausedProvider(arg));
+    return tabPaused || sessionPaused;
   }
 
   int? _effectiveSelectedIndex() {

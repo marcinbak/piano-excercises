@@ -118,5 +118,44 @@ void main() {
         }
       }
     });
+
+    test('ui/ uses package:material_ui and barrel-only cross-feature imports', () {
+      final uiFiles = dartFilesIn('lib/features/score_editor/ui');
+      expect(uiFiles, isNotEmpty);
+
+      for (final file in uiFiles) {
+        final content = file.readAsStringSync();
+        expect(
+          content.contains('package:flutter/material.dart'),
+          isFalse,
+          reason:
+              '${file.path} must import package:material_ui/material_ui.dart.',
+        );
+        for (final match in importPattern.allMatches(content)) {
+          final uri = match.group(1)!;
+          if (uri.contains('/features/catalog/')) {
+            expect(
+              uri,
+              'package:piano_exercises/features/catalog/catalog.dart',
+              reason: '${file.path} must import catalog barrel only.',
+            );
+          }
+          if (uri.contains('/features/midi/')) {
+            expect(
+              uri,
+              'package:piano_exercises/features/midi/midi.dart',
+              reason: '${file.path} must import midi barrel only.',
+            );
+          }
+          if (uri.contains('/features/piece_practice/')) {
+            expect(
+              uri,
+              'package:piano_exercises/features/piece_practice/piece_practice.dart',
+              reason: '${file.path} must import piece_practice barrel only.',
+            );
+          }
+        }
+      }
+    });
   });
 }

@@ -90,6 +90,9 @@ class PianoExercisesRoot extends StatelessWidget {
           return repository;
         }),
         scoreParserProvider.overrideWithValue(const MusicXmlScoreParser()),
+        scoreSerializerProvider.overrideWithValue(
+          const MusicXmlScoreSerializer(),
+        ),
         scoreImportSourceProvider.overrideWith(
           (ref) =>
               scoreImportSource ??

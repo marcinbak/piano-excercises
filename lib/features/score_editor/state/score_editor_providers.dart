@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
 import 'package:piano_exercises/features/score_editor/domain/score_draft.dart';
+import 'package:piano_exercises/features/score_editor/state/score_editor_state.dart';
 
 /// Coalescing window grouping near-simultaneous Note On bursts into step-time chords.
 final scoreEditorChordWindowProvider = Provider<Duration>((ref) {
@@ -13,7 +14,7 @@ final scoreEditorClockMsProvider = Provider<int Function()>((ref) {
   return () => stopwatch.elapsedMilliseconds;
 });
 
-/// Pause toggle gating live MIDI note entry while away from Compose or inside sheets.
+/// Pause toggle gating live MIDI note entry on the Compose tab.
 class ScoreEditorPausedNotifier extends Notifier<bool> {
   @override
   bool build() => false;
@@ -24,6 +25,23 @@ class ScoreEditorPausedNotifier extends Notifier<bool> {
 final scoreEditorPausedProvider =
     NotifierProvider.autoDispose<ScoreEditorPausedNotifier, bool>(
       ScoreEditorPausedNotifier.new,
+    );
+
+/// Per-session pause toggle gating live MIDI note entry during pushed modals/preview.
+class ScoreEditorSessionPausedNotifier extends Notifier<bool> {
+  ScoreEditorSessionPausedNotifier(this.arg);
+
+  final ScoreEditorSessionId arg;
+
+  @override
+  bool build() => false;
+
+  void setPaused(bool paused) => state = paused;
+}
+
+final scoreEditorSessionPausedProvider = NotifierProvider.autoDispose
+    .family<ScoreEditorSessionPausedNotifier, bool, ScoreEditorSessionId>(
+      ScoreEditorSessionPausedNotifier.new,
     );
 
 /// Locates the index of a newly added note inside [next] compared against [prev].

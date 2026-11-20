@@ -10,6 +10,7 @@ class PieceCatalogCard extends StatelessWidget {
     required this.onDeletePiece,
     required this.onDeleteVariant,
     this.onSelectVariant,
+    this.onEditVariant,
   });
 
   final Piece piece;
@@ -17,6 +18,7 @@ class PieceCatalogCard extends StatelessWidget {
   final VoidCallback onDeletePiece;
   final ValueChanged<ScoreVariant> onDeleteVariant;
   final void Function(Piece piece, ScoreVariant variant)? onSelectVariant;
+  final void Function(Piece piece, ScoreVariant variant)? onEditVariant;
 
   @override
   Widget build(BuildContext context) {
@@ -94,6 +96,9 @@ class PieceCatalogCard extends StatelessWidget {
                   onOpen: onSelectVariant == null
                       ? null
                       : () => onSelectVariant!(piece, variant),
+                  onEdit: onEditVariant == null
+                      ? null
+                      : () => onEditVariant!(piece, variant),
                   onDelete: () => onDeleteVariant(variant),
                 ),
             ],
@@ -133,12 +138,14 @@ class _VariantRow extends StatelessWidget {
     required this.variant,
     required this.onOpen,
     required this.onDelete,
+    this.onEdit,
   });
 
   final String pieceId;
   final ScoreVariant variant;
   final VoidCallback? onOpen;
   final VoidCallback onDelete;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -194,6 +201,14 @@ class _VariantRow extends StatelessWidget {
               ),
             ),
           ),
+          if (onEdit != null)
+            IconButton(
+              key: ValueKey<String>('variant-edit-button-${variant.id}'),
+              tooltip: 'Edit arrangement',
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              onPressed: onEdit,
+            ),
           IconButton(
             key: ValueKey<String>('variant-delete-button-${variant.id}'),
             tooltip: 'Remove arrangement',
