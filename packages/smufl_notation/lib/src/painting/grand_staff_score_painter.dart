@@ -15,6 +15,7 @@ class GrandStaffScorePainter extends CustomPainter {
   const GrandStaffScorePainter({
     required this.layout,
     this.activeSliceIndex,
+    this.matchedSliceIndex,
     this.dimmedClef,
     this.activeHand = NotationHandFilter.both,
     this.wrongNoteOverlays = const <WrongNoteOverlay>[],
@@ -23,6 +24,7 @@ class GrandStaffScorePainter extends CustomPainter {
 
   final EngravedScoreLayout layout;
   final int? activeSliceIndex;
+  final int? matchedSliceIndex;
   final SmuflClef? dimmedClef;
   final NotationHandFilter activeHand;
   final List<WrongNoteOverlay> wrongNoteOverlays;
@@ -48,12 +50,17 @@ class GrandStaffScorePainter extends CustomPainter {
       }
       if (activePlacement != null &&
           activePlacement.system.systemIndex == system.systemIndex) {
+        final isActiveMatched =
+            matchedSliceIndex != null && activeSliceIndex == matchedSliceIndex;
         canvas.drawRRect(
           RRect.fromRectAndRadius(
             activePlacement.slice.cursorRect,
             const Radius.circular(4.0),
           ),
-          Paint()..color = style.cursorColor,
+          Paint()
+            ..color = isActiveMatched
+                ? style.successColor.withValues(alpha: 0.18)
+                : style.cursorColor,
         );
       }
       _paintSystem(canvas, system, style);
@@ -158,12 +165,15 @@ class GrandStaffScorePainter extends CustomPainter {
     final sp = system.staffSpace;
     final dimmed = effectiveDimmedClef;
     for (final slice in measure.slices) {
+      final isMatched = slice.sliceIndex == matchedSliceIndex;
       ScorePainterChordRenderer.paintChord(
         canvas,
         system,
         slice.trebleChord,
         style,
-        colors.treble,
+        isMatched && dimmed != SmuflClef.treble
+            ? style.successColor
+            : colors.treble,
         isDimmed: dimmed == SmuflClef.treble,
       );
       ScorePainterChordRenderer.paintChord(
@@ -171,7 +181,9 @@ class GrandStaffScorePainter extends CustomPainter {
         system,
         slice.bassChord,
         style,
-        colors.bass,
+        isMatched && dimmed != SmuflClef.bass
+            ? style.successColor
+            : colors.bass,
         isDimmed: dimmed == SmuflClef.bass,
       );
       ScorePainterChordRenderer.paintRest(
@@ -224,6 +236,7 @@ class GrandStaffScorePainter extends CustomPainter {
   bool shouldRepaint(covariant GrandStaffScorePainter oldDelegate) {
     return !identical(oldDelegate.layout, layout) ||
         oldDelegate.activeSliceIndex != activeSliceIndex ||
+        oldDelegate.matchedSliceIndex != matchedSliceIndex ||
         oldDelegate.dimmedClef != dimmedClef ||
         oldDelegate.activeHand != activeHand ||
         oldDelegate.visibleRect != visibleRect ||

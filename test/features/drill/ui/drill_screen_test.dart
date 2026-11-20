@@ -216,7 +216,7 @@ void main() {
       await tester.pump();
       expect(_findStaffPainter(tester).wrongPlayedNotes, isEmpty);
 
-      // 5) Clean target hit C4 (60).
+      // 5) Clean target hit C4 (60): turns green for 500ms before advancing.
       nowMs = 1750;
       repository.noteEventsController.add(_noteOn(60));
       await tester.pump();
@@ -224,15 +224,24 @@ void main() {
       repository.noteEventsController.add(_noteOff(60));
       await tester.pump();
 
-      final afterHit = _findStaffPainter(tester);
+      final duringHold = _findStaffPainter(tester);
       expect(
-        afterHit.targetNote,
-        const StaffNote(note: DiatonicNote.c, octave: 4, clef: Clef.bass),
+        duringHold.targetNote,
+        const StaffNote(note: DiatonicNote.c, octave: 4, clef: Clef.treble),
       );
-      expect(afterHit.wrongPlayedNotes, isEmpty);
+      expect(duringHold.isTargetCorrect, isTrue);
+      expect(duringHold.wrongPlayedNotes, isEmpty);
       expect(find.textContaining('Correct: C4 (100 ms)'), findsOneWidget);
       expect(find.text('100%'), findsOneWidget);
       expect(find.text('100 ms'), findsOneWidget);
+
+      await tester.pump(const Duration(milliseconds: 500));
+      final afterAdvance = _findStaffPainter(tester);
+      expect(
+        afterAdvance.targetNote,
+        const StaffNote(note: DiatonicNote.c, octave: 4, clef: Clef.bass),
+      );
+      expect(afterAdvance.isTargetCorrect, isFalse);
     },
   );
 
@@ -306,8 +315,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 35));
       repository.noteEventsController.add(_noteOff(60));
       await tester.pump();
+      expect(_findStaffPainter(tester).isTargetCorrect, isTrue);
       expect(find.textContaining('Correct: C4'), findsOneWidget);
       expect(find.text('100%'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(_findStaffPainter(tester).isTargetCorrect, isFalse);
     },
   );
 
@@ -556,12 +568,24 @@ void main() {
         staffLineColor: Colors.grey,
       );
 
+      const painterGreen = GrandStaffPainter(
+        targetNote: target,
+        wrongPlayedNotes: wrong,
+        inkColor: Colors.black,
+        errorColor: Colors.red,
+        staffLineColor: Colors.grey,
+        isTargetCorrect: true,
+        successColor: Colors.green,
+      );
+
       expect(painterA.shouldRepaint(painterSame), isFalse);
       expect(painterA.shouldRepaint(painterDifferent), isTrue);
+      expect(painterA.shouldRepaint(painterGreen), isTrue);
 
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder);
       painterA.paint(canvas, const Size(320, 240));
+      painterGreen.paint(canvas, const Size(320, 240));
       painterA.paint(canvas, Size.zero);
       final picture = recorder.endRecording();
       picture.dispose();

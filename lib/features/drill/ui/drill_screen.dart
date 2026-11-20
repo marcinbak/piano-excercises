@@ -76,6 +76,7 @@ class _DrillScreenState extends ConsumerState<DrillScreen> {
                         child: GrandStaffCard(
                           targetNote: sessionState.targetNote,
                           wrongPlayedNotes: sessionState.wrongPlayedNotes,
+                          isTargetCorrect: sessionState.isShowingCorrect,
                         ),
                       ),
                     ),

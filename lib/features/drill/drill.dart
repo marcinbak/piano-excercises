@@ -14,7 +14,8 @@ export 'state/drill_providers.dart'
         drillChordWindowProvider,
         drillClockMsProvider,
         drillControllerProvider,
-        drillRandomIntProvider;
+        drillRandomIntProvider,
+        drillSuccessHoldDurationProvider;
 export 'ui/drill_header_bar.dart'
     show DrillFeedbackBanner, DrillStageSelector, DrillStatsBar;
 export 'ui/drill_screen.dart' show DrillScreen;

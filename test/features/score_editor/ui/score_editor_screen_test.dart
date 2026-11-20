@@ -516,11 +516,11 @@ void main() {
         midiRepo.emitNoteOn(60);
         await tester.pump(const Duration(milliseconds: 20));
         midiRepo.emitNoteOff(60);
-        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
         midiRepo.emitNoteOn(62);
         await tester.pump(const Duration(milliseconds: 20));
         midiRepo.emitNoteOff(62);
-        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
         expect(
           find.byKey(const ValueKey<String>('practice_completed_banner')),
           findsOneWidget,
@@ -540,11 +540,11 @@ void main() {
         midiRepo.emitNoteOn(60);
         await tester.pump(const Duration(milliseconds: 20));
         midiRepo.emitNoteOff(60);
-        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
         midiRepo.emitNoteOn(62);
         await tester.pump(const Duration(milliseconds: 20));
         midiRepo.emitNoteOff(62);
-        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 500));
         expect(
           find.byKey(const ValueKey<String>('practice_completed_banner')),
           findsOneWidget,

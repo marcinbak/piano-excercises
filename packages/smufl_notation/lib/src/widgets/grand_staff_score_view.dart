@@ -16,6 +16,7 @@ class GrandStaffScoreView extends StatefulWidget {
     super.key,
     this.style = const ScoreStyle(),
     this.activeSliceIndex,
+    this.matchedSliceIndex,
     this.dimmedClef,
     this.activeHand = NotationHandFilter.both,
     this.wrongNoteOverlays = const <WrongNoteOverlay>[],
@@ -26,6 +27,7 @@ class GrandStaffScoreView extends StatefulWidget {
   final NotationScore score;
   final ScoreStyle style;
   final int? activeSliceIndex;
+  final int? matchedSliceIndex;
   final SmuflClef? dimmedClef;
   final NotationHandFilter activeHand;
   final List<WrongNoteOverlay> wrongNoteOverlays;
@@ -235,6 +237,7 @@ class _GrandStaffScoreViewState extends State<GrandStaffScoreView> {
                     painter: GrandStaffScorePainter(
                       layout: layout,
                       activeSliceIndex: widget.activeSliceIndex,
+                      matchedSliceIndex: widget.matchedSliceIndex,
                       dimmedClef: widget.dimmedClef,
                       activeHand: widget.activeHand,
                       wrongNoteOverlays: widget.wrongNoteOverlays,

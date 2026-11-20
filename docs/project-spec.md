@@ -9,8 +9,8 @@ Replicate the core note-reading drill loop from [MusoPhone Exercise 7](https://m
 1. App renders a target note on the `Bravura` grand staff in [DrillScreen](../lib/features/drill/ui/drill_screen.dart).
 2. User plays a key on a Bluetooth LE MIDI piano.
 3. App coalesces simultaneous Note On events (`35ms`) and checks single-note pitch and octave against the target.
-4. Clean hits advance the prompt and increment streak; mistakes reset streak, hold the target, and draw red wrong notes.
-5. Clearing a missed prompt advances to the next note without incrementing streak.
+4. Clean hits highlight the matched note green (`500ms`), increment streak, and advance the prompt; mistakes reset streak, hold the target, and draw red wrong notes.
+5. Clearing a missed prompt highlights the matched note green (`500ms`) and advances to the next note without incrementing streak.
 
 ## 3. Difficulty Progression
 
@@ -39,7 +39,7 @@ Stage pools live in [progression_stage.dart](../lib/features/progression/domain/
 - **Runtime Score Import (`D1`):** Import `.mxl`/`.musicxml` files, multi-file picks, and `.zip` bundles at runtime with zero bundled scores ([score-import.md](score-import.md)); [catalog.dart](../lib/features/catalog/catalog.dart) provides `SqliteCatalogRepository`, `AppDocsScoreStore`, `CatalogScreen`, and `BatchScoreImportSheet`, and [app_navigation_shell.dart](../lib/app/app_navigation_shell.dart) wires `Drill`/`Catalog`/`Compose` navigation.
 - **Step-Time Score Editor:** [ScoreEditorScreen](../lib/features/score_editor/ui/score_editor_screen.dart) composes and edits scores via BLE-MIDI or touch from `Compose`, [CatalogScreen](../lib/features/catalog/ui/catalog_screen.dart), and [PieceScoreScreen](../lib/features/piece_practice/ui/piece_score_screen.dart).
 - **Score Serialization & Save:** [ScoreSetupSheet](../lib/features/score_editor/ui/score_setup_sheet.dart) edits setup; [ScoreSaveSheet](../lib/features/score_editor/ui/score_save_sheet.dart) saves new, attached, or updated `.musicxml` variants via [MusicXmlScoreSerializer](../lib/features/catalog/data/musicxml_score_serializer.dart).
-- **SMuFL Engraving Engine (`D2`):** `[M8]` completed production engraving in [smufl_notation.dart](../packages/smufl_notation/lib/smufl_notation.dart) and score rendering in [piece_practice.dart](../lib/features/piece_practice/piece_practice.dart); `[M9]` completed polyphonic Wait-Mode evaluation and measure loops, deferring Tempo & Metronome Mode to `[M10]`.
+- **SMuFL Engraving Engine (`D2`):** `[M8]` completed production engraving in [smufl_notation.dart](../packages/smufl_notation/lib/smufl_notation.dart) and score rendering in [piece_practice.dart](../lib/features/piece_practice/piece_practice.dart); `[M9]` completed polyphonic Wait-Mode evaluation, measure loops, and 90°-rotatable fullscreen score view, deferring Tempo & Metronome Mode to `[M10]`.
 - **Fallback Input:** Decide whether to include an on-screen piano or microphone pitch detection when no MIDI keyboard is connected.
 - **USB-MIDI:** Decide whether to support wired USB-MIDI alongside BLE-MIDI.
 - **Pre-Release Permission Check (Deferred):** Confirm permission with the creators/owners of [MusoPhone](https://musophone.com/tests-new/?exercise=7) before any public release; all credits go to them.

@@ -112,6 +112,9 @@ class PiecePracticeBody extends StatelessWidget {
             child: PieceScoreViewport(
               score: score,
               activeSliceIndex: activeSliceIndex,
+              matchedSliceIndex: activeSession.isShowingCorrect
+                  ? activeSliceIndex
+                  : null,
               handMode: handMode,
               wrongNoteOverlays: wrongOverlays,
               onSliceTapped: (tappedSliceIndex) =>

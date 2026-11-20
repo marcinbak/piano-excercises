@@ -141,18 +141,15 @@ class PieceScoreHeaderBar extends StatelessWidget {
     PieceScoreCursorBarData activeCursor,
   ) {
     return Wrap(
-      spacing: 8,
+      spacing: 6,
       runSpacing: 6,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: <Widget>[
         for (final mode in HandMode.values)
-          ChoiceChip(
-            key: ValueKey<String>('hand_mode_${mode.name}'),
-            showCheckmark: false,
-            avatar: Icon(_iconForHand(mode), size: 16),
-            label: Text(mode.label),
+          _HandModeChip(
+            mode: mode,
             selected: handControl.handMode == mode,
-            onSelected: (_) => handControl.onSelectHandMode(mode),
+            onSelect: () => handControl.onSelectHandMode(mode),
           ),
         _MeasureBadge(
           measureNumber: activeCursor.measureNumber,
@@ -164,11 +161,44 @@ class PieceScoreHeaderBar extends StatelessWidget {
       ],
     );
   }
+}
 
-  static IconData _iconForHand(HandMode mode) => switch (mode) {
-    HandMode.both => Icons.piano,
-    HandMode.right => Icons.front_hand_outlined,
-    HandMode.left => Icons.back_hand_outlined,
+class _HandModeChip extends StatelessWidget {
+  const _HandModeChip({
+    required this.mode,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  final HandMode mode;
+  final bool selected;
+  final VoidCallback onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = _buildIcon();
+    return ChoiceChip(
+      key: ValueKey<String>('hand_mode_${mode.name}'),
+      tooltip: mode.label,
+      showCheckmark: false,
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      avatar: selected ? icon : null,
+      label: selected ? Text(mode.shortLabel) : icon,
+      labelPadding: EdgeInsets.symmetric(horizontal: selected ? 4 : 0),
+      padding: EdgeInsets.symmetric(horizontal: selected ? 8 : 6, vertical: 4),
+      selected: selected,
+      onSelected: (_) => onSelect(),
+    );
+  }
+
+  Widget _buildIcon() => switch (mode) {
+    HandMode.both => const Icon(Icons.piano, size: 16),
+    HandMode.right => const Icon(Icons.back_hand_outlined, size: 16),
+    HandMode.left => Transform.flip(
+      flipX: true,
+      child: const Icon(Icons.back_hand_outlined, size: 16),
+    ),
   };
 }
 

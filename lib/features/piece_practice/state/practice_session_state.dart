@@ -40,6 +40,7 @@ final class PracticeSessionState {
     this.loopRange,
     List<StaffNote> wrongPlayedNotes = const <StaffNote>[],
     this.completedSlicesCount = 0,
+    this.isShowingCorrect = false,
   }) : wrongPlayedNotes = List<StaffNote>.unmodifiable(wrongPlayedNotes);
 
   /// Creates initial state pointing to the first playable slice for [handMode].
@@ -58,6 +59,7 @@ final class PracticeSessionState {
   final MeasureLoopRange? loopRange;
   final List<StaffNote> wrongPlayedNotes;
   final int completedSlicesCount;
+  final bool isShowingCorrect;
 
   PracticeSessionState copyWith({
     int? activeSliceOrdinal,
@@ -65,6 +67,7 @@ final class PracticeSessionState {
     MeasureLoopRange? loopRange,
     List<StaffNote>? wrongPlayedNotes,
     int? completedSlicesCount,
+    bool? isShowingCorrect,
   }) {
     return PracticeSessionState(
       activeSliceOrdinal: activeSliceOrdinal ?? this.activeSliceOrdinal,
@@ -72,6 +75,7 @@ final class PracticeSessionState {
       loopRange: loopRange ?? this.loopRange,
       wrongPlayedNotes: wrongPlayedNotes ?? this.wrongPlayedNotes,
       completedSlicesCount: completedSlicesCount ?? this.completedSlicesCount,
+      isShowingCorrect: isShowingCorrect ?? this.isShowingCorrect,
     );
   }
 
@@ -141,8 +145,9 @@ final class PracticeSessionState {
   ({PracticeSessionState nextState, bool matched}) applyEvaluation(
     Score score,
     ChordEvaluationResult result,
-    HandMode handMode,
-  ) {
+    HandMode handMode, {
+    bool holdOnMatch = false,
+  }) {
     switch (result.status) {
       case ChordEvaluationStatus.partialChord:
         final next = wrongPlayedNotes.isEmpty
@@ -155,12 +160,44 @@ final class PracticeSessionState {
           matched: false,
         );
       case ChordEvaluationStatus.completeMatch:
-        return (nextState: _advanceAfterMatch(score, handMode), matched: true);
+        if (holdOnMatch) {
+          return (
+            nextState: copyWith(
+              wrongPlayedNotes: const <StaffNote>[],
+              completedSlicesCount: completedSlicesCount + 1,
+              isShowingCorrect: true,
+            ),
+            matched: true,
+          );
+        }
+        return (
+          nextState: _advanceAfterMatch(
+            score,
+            handMode,
+            nextCompleted: completedSlicesCount + 1,
+          ),
+          matched: true,
+        );
     }
   }
 
-  PracticeSessionState _advanceAfterMatch(Score score, HandMode handMode) {
-    final nextCompleted = completedSlicesCount + 1;
+  /// Completes a green matched hold by advancing to the next slice or completion.
+  PracticeSessionState completeMatchHold(Score score, HandMode handMode) {
+    if (!isShowingCorrect || activeSliceOrdinal == null) {
+      return this;
+    }
+    return _advanceAfterMatch(
+      score,
+      handMode,
+      nextCompleted: completedSlicesCount,
+    );
+  }
+
+  PracticeSessionState _advanceAfterMatch(
+    Score score,
+    HandMode handMode, {
+    required int nextCompleted,
+  }) {
     final nextOrdinal = ScorePracticeNavigator.nextPlayableOrdinal(
       score,
       activeSliceOrdinal!,
@@ -172,6 +209,7 @@ final class PracticeSessionState {
         activeSliceOrdinal: nextOrdinal,
         wrongPlayedNotes: const <StaffNote>[],
         completedSlicesCount: nextCompleted,
+        isShowingCorrect: false,
       );
     }
     if (loopRange != null) {
@@ -193,6 +231,7 @@ final class PracticeSessionState {
       status: PracticeSessionStatus.completed,
       wrongPlayedNotes: const <StaffNote>[],
       completedSlicesCount: nextCompleted,
+      isShowingCorrect: false,
     );
   }
 
@@ -247,7 +286,8 @@ final class PracticeSessionState {
             other.status == status &&
             other.loopRange == loopRange &&
             _listEquals(other.wrongPlayedNotes, wrongPlayedNotes) &&
-            other.completedSlicesCount == completedSlicesCount);
+            other.completedSlicesCount == completedSlicesCount &&
+            other.isShowingCorrect == isShowingCorrect);
   }
 
   @override
@@ -257,6 +297,7 @@ final class PracticeSessionState {
     loopRange,
     Object.hashAll(wrongPlayedNotes),
     completedSlicesCount,
+    isShowingCorrect,
   );
 }
 

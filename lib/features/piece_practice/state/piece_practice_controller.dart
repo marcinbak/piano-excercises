@@ -19,7 +19,8 @@ export 'package:piano_exercises/features/piece_practice/state/piece_score_provid
         practiceClockMsProvider,
         practiceHandModeProvider,
         practicePausedProvider,
-        practiceRoutePausedProvider;
+        practiceRoutePausedProvider,
+        practiceSuccessHoldDurationProvider;
 
 /// Orchestrates polyphonic Wait-Mode evaluation, cursor advancement, and measure loops.
 class PiecePracticeController extends Notifier<PracticeSessionState> {
@@ -28,11 +29,14 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
   final PracticeSessionKey arg;
 
   late MidiChordCoalescer _coalescer;
+  late Duration _successHoldDuration;
+  Timer? _correctHoldTimer;
 
   bool get isPaused => _coalescer.isPaused;
 
   @override
   PracticeSessionState build() {
+    _successHoldDuration = ref.watch(practiceSuccessHoldDurationProvider);
     _coalescer = MidiChordCoalescer(
       chordWindow: ref.watch(practiceChordWindowProvider),
       clockMs: ref.watch(practiceClockMsProvider),
@@ -51,6 +55,13 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
     if (!ref.mounted) {
       return;
     }
+    if (paused && state.isShowingCorrect) {
+      _cancelCorrectHoldTimer();
+      state = state.completeMatchHold(
+        arg.score,
+        ref.read(practiceHandModeProvider),
+      );
+    }
     _coalescer.setPaused(paused);
   }
 
@@ -59,6 +70,7 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
     if (!ref.mounted) {
       return;
     }
+    _cancelCorrectHoldTimer();
     _coalescer.resetActivePrompt();
     state = state.restarted(arg.score, ref.read(practiceHandModeProvider));
   }
@@ -69,6 +81,7 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
     if (!ref.mounted || current == null) {
       return;
     }
+    _cancelCorrectHoldTimer();
     _moveCursorTo(
       ScorePracticeNavigator.nextPlayableOrdinal(
         arg.score,
@@ -85,6 +98,7 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
     if (!ref.mounted || current == null) {
       return;
     }
+    _cancelCorrectHoldTimer();
     _moveCursorTo(
       ScorePracticeNavigator.previousPlayableOrdinal(
         arg.score,
@@ -100,6 +114,7 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
     if (!ref.mounted || arg.score.slices.isEmpty) {
       return;
     }
+    _cancelCorrectHoldTimer();
     _coalescer.resetActivePrompt();
     state = state.soughtTo(
       arg.score,
@@ -113,12 +128,10 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
     if (!ref.mounted) {
       return;
     }
+    final handMode = ref.read(practiceHandModeProvider);
+    final base = _flushPendingHold(handMode);
     _coalescer.resetActivePrompt();
-    state = state.withLoopRange(
-      arg.score,
-      range,
-      ref.read(practiceHandModeProvider),
-    );
+    state = base.withLoopRange(arg.score, range, handMode);
   }
 
   void _moveCursorTo(int? ordinal) {
@@ -130,6 +143,7 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
       activeSliceOrdinal: ordinal,
       status: PracticeSessionStatus.active,
       wrongPlayedNotes: const <StaffNote>[],
+      isShowingCorrect: false,
     );
   }
 
@@ -137,6 +151,7 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
     final repository = ref.watch(midiRepositoryProvider);
     final noteSub = repository.noteEventsStream.listen(_coalescer.onNoteEvent);
     ref.onDispose(() {
+      _cancelCorrectHoldTimer();
       unawaited(noteSub.cancel());
       _coalescer.dispose();
     });
@@ -158,17 +173,23 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
     }, fireImmediately: true);
     ref.listen<HandMode>(practiceHandModeProvider, (previous, next) {
       if (previous != next && ref.mounted) {
+        final base = _flushPendingHold(previous ?? next);
         _coalescer.resetActivePrompt();
-        state = state.withHandMode(arg.score, next);
+        state = base.withHandMode(arg.score, next);
       }
     });
   }
 
   void _onChordFlush(MidiChordFlush flush) {
+    if (!ref.mounted || _coalescer.isPaused) {
+      return;
+    }
+    final handMode = ref.read(practiceHandModeProvider);
+    if (state.isShowingCorrect) {
+      state = _flushPendingHold(handMode);
+    }
     final ordinal = state.activeSliceOrdinal;
-    if (!ref.mounted ||
-        _coalescer.isPaused ||
-        state.status != PracticeSessionStatus.active ||
+    if (state.status != PracticeSessionStatus.active ||
         ordinal == null ||
         ordinal < 0 ||
         ordinal >= arg.score.slices.length) {
@@ -176,7 +197,6 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
     }
 
     final slice = arg.score.slices[ordinal];
-    final handMode = ref.read(practiceHandModeProvider);
     final eval = PolyphonicEvaluator.evaluateSlice(
       slice: slice,
       handMode: handMode,
@@ -186,11 +206,44 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
         slice.sliceIndex,
       ),
     );
-    final outcome = state.applyEvaluation(arg.score, eval, handMode);
+    final holdOnMatch = _successHoldDuration > Duration.zero;
+    final outcome = state.applyEvaluation(
+      arg.score,
+      eval,
+      handMode,
+      holdOnMatch: holdOnMatch,
+    );
     if (outcome.matched) {
       _coalescer.resetActivePrompt();
+      state = outcome.nextState;
+      if (holdOnMatch) {
+        _cancelCorrectHoldTimer();
+        _correctHoldTimer = Timer(_successHoldDuration, _onCorrectHoldComplete);
+      }
+      return;
     }
     state = outcome.nextState;
+  }
+
+  PracticeSessionState _flushPendingHold(HandMode handMode) {
+    _cancelCorrectHoldTimer();
+    return state.completeMatchHold(arg.score, handMode);
+  }
+
+  void _onCorrectHoldComplete() {
+    _correctHoldTimer = null;
+    if (!ref.mounted || !state.isShowingCorrect) {
+      return;
+    }
+    state = state.completeMatchHold(
+      arg.score,
+      ref.read(practiceHandModeProvider),
+    );
+  }
+
+  void _cancelCorrectHoldTimer() {
+    _correctHoldTimer?.cancel();
+    _correctHoldTimer = null;
   }
 
   bool _computeEffectivePaused() =>

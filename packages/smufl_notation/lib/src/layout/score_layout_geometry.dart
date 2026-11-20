@@ -12,6 +12,7 @@ final class ScoreStyle {
     this.staffLineColor = const Color(0xFF5C6470),
     this.cursorColor = const Color(0x241E64D8),
     this.errorColor = const Color(0xFFD32F2F),
+    this.successColor = const Color(0xFF2E7D32),
     this.dimmedOpacity = 0.28,
     this.fontFamily = 'Bravura',
     this.fontPackage,
@@ -24,6 +25,7 @@ final class ScoreStyle {
   final Color staffLineColor;
   final Color cursorColor;
   final Color errorColor;
+  final Color successColor;
   final double dimmedOpacity;
   final String fontFamily;
   final String? fontPackage;
@@ -39,6 +41,7 @@ final class ScoreStyle {
     Color? staffLineColor,
     Color? cursorColor,
     Color? errorColor,
+    Color? successColor,
     double? dimmedOpacity,
     String? fontFamily,
     String? fontPackage,
@@ -52,6 +55,7 @@ final class ScoreStyle {
       staffLineColor: staffLineColor ?? this.staffLineColor,
       cursorColor: cursorColor ?? this.cursorColor,
       errorColor: errorColor ?? this.errorColor,
+      successColor: successColor ?? this.successColor,
       dimmedOpacity: dimmedOpacity ?? this.dimmedOpacity,
       fontFamily: fontFamily ?? this.fontFamily,
       fontPackage: fontPackage ?? this.fontPackage,
@@ -69,6 +73,7 @@ final class ScoreStyle {
             other.staffLineColor == staffLineColor &&
             other.cursorColor == cursorColor &&
             other.errorColor == errorColor &&
+            other.successColor == successColor &&
             other.dimmedOpacity == dimmedOpacity &&
             other.fontFamily == fontFamily &&
             other.fontPackage == fontPackage);
@@ -83,6 +88,7 @@ final class ScoreStyle {
     staffLineColor,
     cursorColor,
     errorColor,
+    successColor,
     dimmedOpacity,
     fontFamily,
     fontPackage,
