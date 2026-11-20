@@ -32,6 +32,10 @@ class _FailingCatalogRepository implements CatalogRepository {
   }
 
   @override
+  Future<Piece> updateVariant(CatalogVariantUpdate update) =>
+      _delegate.updateVariant(update);
+
+  @override
   Future<void> applyBatch(CatalogBatchMutation batch) {
     if (failBatch) {
       throw const CatalogStorageException('Simulated DB batch failure');

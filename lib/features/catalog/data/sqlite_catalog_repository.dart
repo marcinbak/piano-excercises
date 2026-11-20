@@ -179,6 +179,17 @@ final class SqliteCatalogRepository implements CatalogRepository {
   }
 
   @override
+  Future<Piece> updateVariant(CatalogVariantUpdate update) async {
+    try {
+      return await _db.transaction((txn) => updateVariantInTxn(txn, update));
+    } on CatalogStorageException {
+      rethrow;
+    } on sqflite.DatabaseException catch (error) {
+      throw CatalogStorageException('Failed to update variant: $error');
+    }
+  }
+
+  @override
   Future<Piece?> deleteVariant({
     required String pieceId,
     required String variantId,

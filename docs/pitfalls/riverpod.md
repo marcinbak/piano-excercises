@@ -23,3 +23,9 @@
 - **Symptom:** Mutating `practicePausedProvider` while an async screen is in `AsyncLoading` loses the written state next frame.
 - **Root cause:** Riverpod disposes an `autoDispose` `Notifier` at end of frame when no mounted child watches it.
 - **Fix:** Retain the provider with `ref.listen` in the host widget `build()` ([piece_score_screen.dart](../../lib/features/piece_practice/ui/piece_score_screen.dart)).
+
+## Nested route pause gating via global `autoDispose` toggles
+
+- **Symptom:** Pushing a second `PieceScoreScreen` or `ScoreEditorScreen` inherits or overwrites the parent route's paused state.
+- **Root cause:** A single global `practicePausedProvider` or `scoreEditorPausedProvider` shares modal pause state across stacked routes.
+- **Fix:** Isolate per-route pauses with `practiceRoutePausedProvider` ([piece_score_providers.dart](../../lib/features/piece_practice/state/piece_score_providers.dart)) and `scoreEditorSessionPausedProvider` ([score_editor_providers.dart](../../lib/features/score_editor/state/score_editor_providers.dart)).

@@ -16,7 +16,7 @@
 
 - **Symptom:** Notes without `<pitch><alter>` in non-C keys play the key-signature accidental instead of a natural.
 - **Root cause:** MusicXML 4.0 defines omitted `<alter>` as `0` semitones (natural), independent of key signature.
-- **Fix:** Default omitted `<alter>` to `writtenAccidental?.semitoneDelta ?? 0` ([musicxml_note_parser.dart](../../lib/features/catalog/data/musicxml_note_parser.dart)).
+- **Fix:** Default omitted `<alter>` to `writtenAccidental?.semitoneDelta ?? 0` ([musicxml_note_parser.dart](../../lib/features/catalog/data/musicxml_note_parser.dart)) and emit explicit `<alter>` when serializing ([musicxml_note_serializer.dart](../../lib/features/catalog/data/musicxml_note_serializer.dart)).
 
 ## Cross-barline tie continuations and intra-measure accidentals
 

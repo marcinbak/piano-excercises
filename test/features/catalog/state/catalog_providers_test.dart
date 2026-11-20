@@ -43,6 +43,10 @@ class _ControllableCatalogRepository implements CatalogRepository {
   }) => _delegate.attachVariant(pieceId: pieceId, variant: variant);
 
   @override
+  Future<Piece> updateVariant(CatalogVariantUpdate update) =>
+      _delegate.updateVariant(update);
+
+  @override
   Future<void> close() => _delegate.close();
 
   @override
@@ -144,6 +148,16 @@ void main() {
       );
       expect(
         () => container.read(scoreImportSourceProvider),
+        throwsA(
+          isA<ProviderException>().having(
+            (e) => e.exception,
+            'exception',
+            isA<UnimplementedError>(),
+          ),
+        ),
+      );
+      expect(
+        () => container.read(scoreSerializerProvider),
         throwsA(
           isA<ProviderException>().having(
             (e) => e.exception,
@@ -326,4 +340,82 @@ void main() {
       );
     },
   );
+
+  test('CatalogController saveScoreAsNewPiece, saveScoreAsVariant, updateVariantScore bump mutation version', () async {
+    final repo = _ControllableCatalogRepository();
+    final store = InMemoryScoreFileStore();
+    var nextId = 0;
+    var nowMs = 100;
+    final container = ProviderContainer(
+      overrides: [
+        catalogRepositoryProvider.overrideWith((ref) {
+          ref.onDispose(repo.close);
+          return repo;
+        }),
+        scoreFileStoreProvider.overrideWithValue(store),
+        scoreSerializerProvider.overrideWithValue(
+          const MusicXmlScoreSerializer(),
+        ),
+        catalogIdGeneratorProvider.overrideWithValue(() => 'm_${++nextId}'),
+        catalogClockMsProvider.overrideWithValue(() => ++nowMs),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(catalogControllerProvider.future);
+    expect(container.read(catalogMutationVersionProvider), 0);
+
+    final score = ScoreTimelineReducer.reduce(
+      title: 'Draft',
+      initialScale: Scale.fromKeySignature(KeySignature.cMajor),
+      initialTimeSignature: TimeSignature.common,
+      measures: <MeasureTimelineInput>[
+        MeasureTimelineInput(
+          measureNumber: 1,
+          notes: <NoteTimelineInput>[
+            NoteTimelineInput(
+              clef: Clef.treble,
+              diatonicNote: DiatonicNote.c,
+              octave: 4,
+              beatOffset: const RationalBeats.zero(),
+              duration: DurationValue(base: NoteBaseDuration.quarter),
+            ),
+          ],
+        ),
+      ],
+    );
+    final controller = container.read(catalogControllerProvider.notifier);
+
+    final created = await controller.saveScoreAsNewPiece(
+      score: score,
+      details: const CatalogScoreSaveDetails(
+        title: 'Composed One',
+        artist: 'Editor',
+        difficultyTier: DifficultyTier.beginner,
+      ),
+    );
+    expect(created, isNotNull);
+    expect(container.read(catalogMutationVersionProvider), 1);
+
+    final attached = await controller.saveScoreAsVariant(
+      pieceId: created!.id,
+      score: score,
+      difficultyTier: DifficultyTier.intermediate,
+      variantLabel: 'Harder',
+    );
+    expect(attached?.variants, hasLength(2));
+    expect(container.read(catalogMutationVersionProvider), 2);
+
+    final updated = await controller.updateVariantScore(
+      existingVariant: created.variants.single,
+      score: score,
+      details: const CatalogScoreSaveDetails(
+        title: 'Composed Updated',
+        artist: 'Editor 2',
+        difficultyTier: DifficultyTier.elementary,
+      ),
+    );
+    expect(updated?.title, 'Composed Updated');
+    expect(container.read(catalogMutationVersionProvider), 3);
+  });
 }

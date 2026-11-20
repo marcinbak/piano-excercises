@@ -4,6 +4,57 @@ import 'package:piano_exercises/features/catalog/domain/catalog_search_normalize
 import 'package:piano_exercises/features/catalog/domain/piece.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
+/// Atomically updates parent piece metadata, one [ScoreVariant] row, and FTS in [txn].
+Future<Piece> updateVariantInTxn(
+  sqflite.Transaction txn,
+  CatalogVariantUpdate update,
+) async {
+  final pieceRow = await findPieceRow(txn, update.pieceId);
+  if (pieceRow == null) {
+    throw CatalogStorageException('Piece ${update.pieceId} not found.');
+  }
+  final updatedCount = await txn.update(
+    'score_variants',
+    <String, Object?>{
+      'difficulty_tier': update.difficultyTier.tier,
+      'label': update.label,
+      'file_name': update.fileName,
+      'stored_relative_path': update.storedRelativePath,
+      'imported_at_ms': update.importedAtMs,
+    },
+    where: 'id = ? AND piece_id = ?',
+    whereArgs: <Object?>[update.variantId, update.pieceId],
+  );
+  if (updatedCount == 0) {
+    throw CatalogStorageException(
+      'ScoreVariant ${update.variantId} not found on ${update.pieceId}.',
+    );
+  }
+  await txn.update(
+    'pieces',
+    <String, Object?>{
+      'title': update.title,
+      'artist': update.artist,
+      'key_fifths': update.scale.keySignature.fifths,
+      'scale_mode': update.scale.mode.name,
+    },
+    where: 'id = ?',
+    whereArgs: <Object?>[update.pieceId],
+  );
+  final variantsByPiece = await loadVariantsByPiece(txn, <String>[
+    update.pieceId,
+  ]);
+  final updatedPiece = Piece(
+    id: update.pieceId,
+    title: update.title,
+    artist: update.artist,
+    scale: update.scale,
+    variants: variantsByPiece[update.pieceId] ?? const <ScoreVariant>[],
+  );
+  await syncPieceFts(txn, updatedPiece);
+  return updatedPiece;
+}
+
 /// Atomically applies [batch] inserts, target validation, and per-piece FTS sync in [txn].
 Future<void> applyBatchInTxn(
   sqflite.Transaction txn,

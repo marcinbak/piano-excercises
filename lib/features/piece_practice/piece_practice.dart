@@ -8,11 +8,13 @@ export 'state/piece_practice_controller.dart'
         PiecePracticeController,
         PracticeHandModeNotifier,
         PracticePausedNotifier,
+        PracticeRoutePausedNotifier,
         piecePracticeControllerProvider,
         practiceChordWindowProvider,
         practiceClockMsProvider,
         practiceHandModeProvider,
         practicePausedProvider,
+        practiceRoutePausedProvider,
         practiceSuccessHoldDurationProvider;
 export 'state/piece_score_providers.dart'
     show livePieceProvider, variantScoreProvider;

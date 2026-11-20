@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
-import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/features/piece_practice/domain/hand_mode.dart';
 import 'package:piano_exercises/features/piece_practice/domain/score_practice_navigator.dart';
 import 'package:piano_exercises/features/piece_practice/state/piece_practice_controller.dart';
@@ -13,6 +11,8 @@ import 'package:piano_exercises/features/piece_practice/state/practice_session_s
 import 'package:piano_exercises/features/piece_practice/ui/measure_loop_sheet.dart';
 import 'package:piano_exercises/features/piece_practice/ui/piece_practice_body.dart';
 import 'package:piano_exercises/features/piece_practice/ui/piece_score_fullscreen_view.dart';
+import 'package:piano_exercises/features/piece_practice/ui/piece_score_header_bar.dart';
+import 'package:piano_exercises/features/piece_practice/ui/piece_score_header_strip.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 import 'package:smufl_notation/smufl_notation.dart';
 
@@ -24,22 +24,28 @@ class PieceScoreScreen extends ConsumerStatefulWidget {
     this.initialVariant,
     this.initialScore,
     this.wrongNoteOverlays = const <WrongNoteOverlay>[],
+    this.onEditVariant,
   });
 
   final Piece piece;
   final ScoreVariant? initialVariant;
   final Score? initialScore;
   final List<WrongNoteOverlay> wrongNoteOverlays;
+  final Future<void> Function(Piece piece, ScoreVariant variant)? onEditVariant;
 
   @override
   ConsumerState<PieceScoreScreen> createState() => _PieceScoreScreenState();
 }
 
 class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
+  static int _nextRouteId = 1;
+
+  late final int _routeId = _nextRouteId++;
   late ScoreVariant _selectedVariant;
   int _modalPauseDepth = 0;
   bool _wasExternallyPausedBeforeModal = false;
   bool _isOpeningLoopSheet = false;
+  bool _isOpeningEditor = false;
   PieceScoreFullscreenState _fullscreen = const PieceScoreFullscreenState();
 
   @override
@@ -80,6 +86,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   Widget build(BuildContext context) {
     // Retain autoDispose paused state across AsyncLoading before controller mounts.
     ref.listen<bool>(practicePausedProvider, (_, _) {});
+    ref.listen<bool>(practiceRoutePausedProvider(_routeId), (_, _) {});
     final effectivePiece =
         ref.watch(livePieceProvider(widget.piece.id)).value ?? widget.piece;
     final activeVariant = _matchVariant(effectivePiece, _selectedVariant.id);
@@ -93,9 +100,10 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
         : ref
               .watch(variantScoreProvider(activeVariant))
               .whenData((parsed) => parsed.score);
+    final loadedScore = asyncScore.value;
     final screenSize = MediaQuery.sizeOf(context);
     final isCompactHeight = screenSize.height < 480;
-    final session = _watchSession(activeVariant, asyncScore.value);
+    final session = _watchSession(activeVariant, loadedScore);
     final practiceBody = PiecePracticeBody(
       asyncScore: asyncScore,
       handMode: session.handMode,
@@ -118,7 +126,23 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
       child: Scaffold(
         appBar: _fullscreen.isFullscreen
             ? null
-            : _buildAppBar(effectivePiece, asyncScore.hasValue, screenSize),
+            : PieceScoreAppBar(
+                title: effectivePiece.title,
+                isCompactHeight: isCompactHeight,
+                onEditArrangement:
+                    (widget.onEditVariant != null &&
+                        widget.initialScore == null)
+                    ? () =>
+                          unawaited(_openEditor(effectivePiece, activeVariant))
+                    : null,
+                onEnterFullscreen: asyncScore.hasValue
+                    ? () => setState(
+                        () => _fullscreen = _fullscreen.enter(screenSize),
+                      )
+                    : null,
+                onBeforeModal: _pauseBeforeModal,
+                onAfterModal: _restoreAfterModal,
+              ),
         body: SafeArea(
           child: _fullscreen.isFullscreen
               ? PieceScoreFullscreenView(
@@ -132,7 +156,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
                   child: practiceBody,
                 )
               : LayoutBuilder(
-                  builder: (_, constraints) => _buildNormalBody(
+                  builder: (_, constraints) => PieceScoreNormalBody(
                     data: PiecePracticeScreenData(
                       effectivePiece: effectivePiece,
                       activeVariant: activeVariant,
@@ -140,94 +164,40 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
                       isCompactHeight: isCompactHeight,
                       maxHeight: constraints.maxHeight,
                     ),
-                    session: session,
+                    variantControl: PieceScoreVariantControl(
+                      selectedVariant: activeVariant,
+                      onSelectVariant: _selectVariant,
+                    ),
+                    handControl: PieceScoreHandControl(
+                      handMode: session.handMode,
+                      onSelectHandMode: (mode) => ref
+                          .read(practiceHandModeProvider.notifier)
+                          .setMode(mode),
+                    ),
+                    cursor: buildPieceScoreCursorOrNull(
+                      loadedScore: loadedScore,
+                      handMode: session.handMode,
+                      sessionState: session.state,
+                      controller: session.controller,
+                      onOpenLoopSheet:
+                          (loadedScore == null ||
+                              loadedScore.measures.isEmpty ||
+                              session.state == null ||
+                              session.controller == null)
+                          ? null
+                          : () => unawaited(
+                              _openLoopSheet(
+                                loadedScore,
+                                session.state!,
+                                session.controller!,
+                              ),
+                            ),
+                    ),
                     practiceBody: practiceBody,
                   ),
                 ),
         ),
       ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(
-    Piece effectivePiece,
-    bool hasScore,
-    Size screenSize,
-  ) {
-    return AppBar(
-      toolbarHeight: screenSize.height < 480 ? 48 : null,
-      title: Text(
-        effectivePiece.title,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      actions: <Widget>[
-        PieceScoreFullscreenButton(
-          onPressed: hasScore
-              ? () =>
-                    setState(() => _fullscreen = _fullscreen.enter(screenSize))
-              : null,
-        ),
-        MidiStatusActionButton(
-          onBeforeOpen: _pauseBeforeModal,
-          onAfterClose: _restoreAfterModal,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNormalBody({
-    required PiecePracticeScreenData data,
-    required ({
-      HandMode handMode,
-      PracticeSessionState? state,
-      PiecePracticeController? controller,
-    })
-    session,
-    required Widget practiceBody,
-  }) {
-    final loadedScore = data.asyncScore.value;
-    final showHeader =
-        loadedScore != null || data.effectivePiece.variants.length > 1;
-    final maxHeaderHeight = data.isCompactHeight
-        ? math.max(96.0, data.maxHeight * 0.42)
-        : math.max(120.0, data.maxHeight * 0.36);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        if (showHeader) ...<Widget>[
-          PieceScoreHeaderStrip(
-            data: data,
-            handMode: session.handMode,
-            onSelectVariant: _selectVariant,
-            onSelectHandMode: (mode) =>
-                ref.read(practiceHandModeProvider.notifier).setMode(mode),
-            cursor: buildPieceScoreCursorBarData(
-              score: loadedScore,
-              handMode: session.handMode,
-              sessionState: session.state,
-              controller: session.controller,
-              onOpenLoopSheet:
-                  (loadedScore == null ||
-                      loadedScore.measures.isEmpty ||
-                      session.state == null ||
-                      session.controller == null)
-                  ? null
-                  : () => unawaited(
-                      _openLoopSheet(
-                        loadedScore,
-                        session.state!,
-                        session.controller!,
-                      ),
-                    ),
-            ),
-            maxHeaderHeight: maxHeaderHeight,
-          ),
-          const Divider(height: 1),
-        ],
-        Expanded(child: practiceBody),
-      ],
     );
   }
 
@@ -244,6 +214,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     final key = PracticeSessionKey(
       variantId: activeVariant.id,
       score: loadedScore,
+      routeId: _routeId,
     );
     return (
       handMode: handMode,
@@ -254,8 +225,9 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
 
   void _pauseBeforeModal() {
     if (_modalPauseDepth == 0) {
-      _wasExternallyPausedBeforeModal = ref.read(practicePausedProvider);
-      ref.read(practicePausedProvider.notifier).setPaused(true);
+      final routePaused = ref.read(practiceRoutePausedProvider(_routeId));
+      _wasExternallyPausedBeforeModal = routePaused;
+      ref.read(practiceRoutePausedProvider(_routeId).notifier).setPaused(true);
     }
     _modalPauseDepth += 1;
   }
@@ -267,7 +239,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     if (!mounted || _modalPauseDepth > 0 || _wasExternallyPausedBeforeModal) {
       return;
     }
-    ref.read(practicePausedProvider.notifier).setPaused(false);
+    ref.read(practiceRoutePausedProvider(_routeId).notifier).setPaused(false);
   }
 
   Future<void> _openLoopSheet(
@@ -312,6 +284,20 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   void _selectVariant(ScoreVariant variant) {
     if (variant.id != _selectedVariant.id) {
       setState(() => _selectedVariant = variant);
+    }
+  }
+
+  Future<void> _openEditor(Piece piece, ScoreVariant variant) async {
+    if (_isOpeningEditor || widget.onEditVariant == null) {
+      return;
+    }
+    _isOpeningEditor = true;
+    _pauseBeforeModal();
+    try {
+      await widget.onEditVariant!(piece, variant);
+    } finally {
+      _isOpeningEditor = false;
+      _restoreAfterModal();
     }
   }
 }
