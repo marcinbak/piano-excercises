@@ -455,6 +455,115 @@ void main() {
       expect(await repo.countPieces(), 126);
       expect(await repo.getPieceById('rollback_piece'), isNull);
     });
+
+    test(
+      'updateVariant updates piece metadata, variant fields, and syncs FTS',
+      () async {
+        final cMajor = Scale.fromKeySignature(KeySignature.cMajor);
+        final eMinor = Scale.fromKeySignature(
+          const KeySignature(1),
+          mode: ScaleMode.minor,
+        );
+        await repo.createPiece(
+          Piece(
+            id: 'p_upd',
+            title: 'Old Waltz',
+            artist: 'Old Artist',
+            scale: cMajor,
+            variants: <ScoreVariant>[
+              ScoreVariant(
+                id: 'v_upd',
+                pieceId: 'p_upd',
+                difficultyTier: DifficultyTier.beginner,
+                label: 'Easy',
+                fileName: 'old_waltz.mxl',
+                storedRelativePath: 'scores/v_upd.mxl',
+                importedAtMs: 100,
+              ),
+            ],
+          ),
+        );
+
+        final updated = await repo.updateVariant(
+          CatalogVariantUpdate(
+            pieceId: 'p_upd',
+            variantId: 'v_upd',
+            title: 'Revised Prelude',
+            artist: 'New Composer',
+            scale: eMinor,
+            difficultyTier: DifficultyTier.advanced,
+            label: 'Concert Cut',
+            fileName: 'revised_prelude.musicxml',
+            storedRelativePath: 'scores/v_upd.musicxml',
+            importedAtMs: 500,
+          ),
+        );
+
+        expect(updated.title, 'Revised Prelude');
+        expect(updated.artist, 'New Composer');
+        expect(updated.scale, eMinor);
+        expect(updated.variants.single.difficultyTier, DifficultyTier.advanced);
+        expect(updated.variants.single.label, 'Concert Cut');
+        expect(updated.variants.single.fileName, 'revised_prelude.musicxml');
+        expect(
+          updated.variants.single.storedRelativePath,
+          'scores/v_upd.musicxml',
+        );
+        expect(updated.variants.single.importedAtMs, 500);
+
+        // Old FTS tokens removed, new FTS tokens searchable.
+        expect(
+          await repo.queryPieces(const CatalogQuery(searchText: 'old')),
+          isEmpty,
+        );
+        expect(
+          (await repo.queryPieces(const CatalogQuery(searchText: 'prelude')))
+              .map((p) => p.id),
+          <String>['p_upd'],
+        );
+        expect(
+          (await repo.queryPieces(const CatalogQuery(searchText: 'composer')))
+              .map((p) => p.id),
+          <String>['p_upd'],
+        );
+
+        // Missing piece or variant rejects cleanly without mutating DB.
+        await expectLater(
+          () => repo.updateVariant(
+            CatalogVariantUpdate(
+              pieceId: 'missing_p',
+              variantId: 'v_upd',
+              title: 'X',
+              artist: '',
+              scale: cMajor,
+              difficultyTier: DifficultyTier.beginner,
+              label: 'Beginner',
+              fileName: 'x.musicxml',
+              storedRelativePath: 'scores/v_upd.musicxml',
+              importedAtMs: 1,
+            ),
+          ),
+          throwsA(isA<CatalogStorageException>()),
+        );
+        await expectLater(
+          () => repo.updateVariant(
+            CatalogVariantUpdate(
+              pieceId: 'p_upd',
+              variantId: 'missing_v',
+              title: 'X',
+              artist: '',
+              scale: cMajor,
+              difficultyTier: DifficultyTier.beginner,
+              label: 'Beginner',
+              fileName: 'x.musicxml',
+              storedRelativePath: 'scores/missing_v.musicxml',
+              importedAtMs: 1,
+            ),
+          ),
+          throwsA(isA<CatalogStorageException>()),
+        );
+      },
+    );
   });
 
   group('Android FTS4 fallback contract', () {

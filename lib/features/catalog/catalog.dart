@@ -1,6 +1,7 @@
 export 'data/app_docs_score_store.dart' show AppDocsScoreStore;
 export 'data/file_picker_score_importer.dart' show FilePickerScoreImporter;
 export 'data/musicxml_score_parser.dart' show MusicXmlScoreParser;
+export 'data/musicxml_score_serializer.dart' show MusicXmlScoreSerializer;
 export 'data/sqlite_catalog_repository.dart' show SqliteCatalogRepository;
 export 'data/zip_bundle_score_extractor.dart' show ZipBundleScoreExtractor;
 export 'domain/catalog_batch_import_planner.dart'
@@ -20,7 +21,10 @@ export 'domain/catalog_repository.dart'
         CatalogBatchMutation,
         CatalogBatchPieceAttachment,
         CatalogRepository,
-        CatalogStorageException;
+        CatalogStorageException,
+        CatalogVariantUpdate;
+export 'domain/catalog_score_save_coordinator.dart'
+    show CatalogScoreSaveCoordinator, CatalogScoreSaveDetails;
 export 'domain/catalog_search_normalizer.dart'
     show CatalogSearchNormalizer, FtsDialect;
 export 'domain/difficulty_tier.dart' show DifficultyTier;
@@ -42,10 +46,12 @@ export 'domain/score_parser.dart'
         ScoreMetadata,
         ScoreParseException,
         ScoreParser;
+export 'domain/score_serializer.dart' show ScoreSerializer;
 export 'state/catalog_providers.dart'
     show
         CatalogController,
         CatalogErrorNotifier,
+        CatalogMutationVersionNotifier,
         CatalogQueryNotifier,
         CatalogSnapshot,
         catalogClockMsProvider,
@@ -53,11 +59,14 @@ export 'state/catalog_providers.dart'
         catalogErrorProvider,
         catalogIdGeneratorProvider,
         catalogImportCoordinatorProvider,
+        catalogMutationVersionProvider,
         catalogQueryProvider,
         catalogRepositoryProvider,
+        catalogScoreSaveCoordinatorProvider,
         scoreFileStoreProvider,
         scoreImportSourceProvider,
-        scoreParserProvider;
+        scoreParserProvider,
+        scoreSerializerProvider;
 export 'ui/batch_score_import_sheet.dart' show BatchScoreImportSheet;
 export 'ui/catalog_screen.dart' show CatalogScreen;
 export 'ui/score_import_fields.dart'

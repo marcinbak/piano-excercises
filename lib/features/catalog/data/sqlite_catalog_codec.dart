@@ -7,7 +7,7 @@ import 'package:piano_exercises/shared/music/music.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 export 'package:piano_exercises/features/catalog/data/sqlite_catalog_batch_codec.dart'
-    show applyBatchInTxn;
+    show applyBatchInTxn, updateVariantInTxn;
 
 const int catalogSqlBatchSize = 400;
 

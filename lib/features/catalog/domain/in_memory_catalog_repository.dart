@@ -124,6 +124,40 @@ final class InMemoryCatalogRepository implements CatalogRepository {
   }
 
   @override
+  Future<Piece> updateVariant(CatalogVariantUpdate update) async {
+    _ensureOpen();
+    final existing = _pieces[update.pieceId];
+    if (existing == null) {
+      throw CatalogStorageException('Piece ${update.pieceId} not found.');
+    }
+    final index = existing.variants.indexWhere((v) => v.id == update.variantId);
+    if (index < 0) {
+      throw CatalogStorageException(
+        'ScoreVariant ${update.variantId} not found on ${update.pieceId}.',
+      );
+    }
+    final nextVariants = List<ScoreVariant>.of(existing.variants);
+    nextVariants[index] = ScoreVariant(
+      id: update.variantId,
+      pieceId: update.pieceId,
+      difficultyTier: update.difficultyTier,
+      label: update.label,
+      fileName: update.fileName,
+      storedRelativePath: update.storedRelativePath,
+      importedAtMs: update.importedAtMs,
+    );
+    final updated = Piece(
+      id: existing.id,
+      title: update.title,
+      artist: update.artist,
+      scale: update.scale,
+      variants: nextVariants,
+    );
+    _pieces[update.pieceId] = updated;
+    return updated;
+  }
+
+  @override
   Future<void> applyBatch(CatalogBatchMutation batch) async {
     _ensureOpen();
     if (batch.isEmpty) {

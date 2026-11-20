@@ -4,15 +4,24 @@ import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_import_coordinator.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_repository.dart';
+import 'package:piano_exercises/features/catalog/domain/catalog_score_save_coordinator.dart';
 import 'package:piano_exercises/features/catalog/domain/in_memory_catalog_repository.dart';
 import 'package:piano_exercises/features/catalog/domain/score_file_store.dart';
 import 'package:piano_exercises/features/catalog/domain/score_import_source.dart';
 import 'package:piano_exercises/features/catalog/domain/score_parser.dart';
+import 'package:piano_exercises/features/catalog/domain/score_serializer.dart';
 
 /// Parses imported `.mxl` and `.musicxml` score bytes; overridden in `app/` and tests.
 final scoreParserProvider = Provider<ScoreParser>((ref) {
   throw UnimplementedError(
     'scoreParserProvider must be overridden in ProviderScope.',
+  );
+});
+
+/// Serializes edited/composed [Score]s into `.musicxml` bytes; overridden in `app/` and tests.
+final scoreSerializerProvider = Provider<ScoreSerializer>((ref) {
+  throw UnimplementedError(
+    'scoreSerializerProvider must be overridden in ProviderScope.',
   );
 });
 
@@ -65,3 +74,28 @@ final catalogImportCoordinatorProvider = Provider<CatalogImportCoordinator>((
     generateId: ref.watch(catalogIdGeneratorProvider),
   );
 });
+
+/// Coordinates score serialization, atomic file writes, and catalog save mutations.
+final catalogScoreSaveCoordinatorProvider =
+    Provider<CatalogScoreSaveCoordinator>((ref) {
+      return CatalogScoreSaveCoordinator(
+        catalogRepository: ref.watch(catalogRepositoryProvider),
+        scoreFileStore: ref.watch(scoreFileStoreProvider),
+        scoreSerializer: ref.watch(scoreSerializerProvider),
+        clockMs: ref.watch(catalogClockMsProvider),
+        generateId: ref.watch(catalogIdGeneratorProvider),
+      );
+    });
+
+/// Monotonic version bumped on every catalog write/delete to invalidate cached variant scores.
+class CatalogMutationVersionNotifier extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state += 1;
+}
+
+final catalogMutationVersionProvider =
+    NotifierProvider<CatalogMutationVersionNotifier, int>(
+      CatalogMutationVersionNotifier.new,
+    );

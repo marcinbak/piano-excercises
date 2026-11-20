@@ -5,6 +5,7 @@ import 'package:piano_exercises/features/piece_practice/domain/hand_mode.dart';
 /// Loads and parses the `.mxl`/`.musicxml` payload for a catalog [ScoreVariant].
 final variantScoreProvider = FutureProvider.autoDispose
     .family<ParsedScore, ScoreVariant>((ref, variant) async {
+      ref.watch(catalogMutationVersionProvider);
       final fileStore = ref.watch(scoreFileStoreProvider);
       final parser = ref.watch(scoreParserProvider);
       final bytes = await fileStore.readScoreBytes(variant.storedRelativePath);

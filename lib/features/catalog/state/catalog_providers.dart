@@ -5,6 +5,7 @@ import 'package:piano_exercises/features/catalog/domain/catalog_batch_import_pla
 import 'package:piano_exercises/features/catalog/domain/catalog_import_coordinator.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_query.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_repository.dart';
+import 'package:piano_exercises/features/catalog/domain/catalog_score_save_coordinator.dart';
 import 'package:piano_exercises/features/catalog/domain/difficulty_tier.dart';
 import 'package:piano_exercises/features/catalog/domain/piece.dart';
 import 'package:piano_exercises/features/catalog/domain/score_import_source.dart';
@@ -15,13 +16,17 @@ import 'package:piano_exercises/shared/music/music.dart';
 
 export 'package:piano_exercises/features/catalog/state/catalog_dependencies.dart'
     show
+        CatalogMutationVersionNotifier,
         catalogClockMsProvider,
         catalogIdGeneratorProvider,
         catalogImportCoordinatorProvider,
+        catalogMutationVersionProvider,
         catalogRepositoryProvider,
+        catalogScoreSaveCoordinatorProvider,
         scoreFileStoreProvider,
         scoreImportSourceProvider,
-        scoreParserProvider;
+        scoreParserProvider,
+        scoreSerializerProvider;
 export 'package:piano_exercises/features/catalog/state/catalog_query_state.dart'
     show
         CatalogErrorNotifier,
@@ -30,7 +35,7 @@ export 'package:piano_exercises/features/catalog/state/catalog_query_state.dart'
         catalogErrorProvider,
         catalogQueryProvider;
 
-/// Manages catalog query results and runtime `.mxl`/`.musicxml` import mutations.
+/// Manages catalog query results and runtime `.mxl`/`.musicxml` import & save mutations.
 class CatalogController extends AsyncNotifier<CatalogSnapshot> {
   @override
   Future<CatalogSnapshot> build() async {
@@ -98,6 +103,51 @@ class CatalogController extends AsyncNotifier<CatalogSnapshot> {
     );
   }
 
+  Future<Piece?> saveScoreAsNewPiece({
+    required Score score,
+    required CatalogScoreSaveDetails details,
+  }) {
+    return _runMutation(
+      () => ref
+          .read(catalogScoreSaveCoordinatorProvider)
+          .saveAsNewPiece(score: score, details: details),
+    );
+  }
+
+  Future<Piece?> saveScoreAsVariant({
+    required String pieceId,
+    required Score score,
+    required DifficultyTier difficultyTier,
+    String? variantLabel,
+  }) {
+    return _runMutation(
+      () => ref
+          .read(catalogScoreSaveCoordinatorProvider)
+          .saveAsAttachedVariant(
+            pieceId: pieceId,
+            score: score,
+            difficultyTier: difficultyTier,
+            variantLabel: variantLabel,
+          ),
+    );
+  }
+
+  Future<Piece?> updateVariantScore({
+    required ScoreVariant existingVariant,
+    required Score score,
+    required CatalogScoreSaveDetails details,
+  }) {
+    return _runMutation(
+      () => ref
+          .read(catalogScoreSaveCoordinatorProvider)
+          .updateVariantInPlace(
+            existingVariant: existingVariant,
+            score: score,
+            details: details,
+          ),
+    );
+  }
+
   Future<void> deleteVariant({
     required String pieceId,
     required String variantId,
@@ -140,6 +190,7 @@ class CatalogController extends AsyncNotifier<CatalogSnapshot> {
       if (!ref.mounted) {
         return result;
       }
+      ref.read(catalogMutationVersionProvider.notifier).bump();
       await _reloadSnapshot();
       return result;
     } catch (error) {
@@ -161,6 +212,7 @@ class CatalogController extends AsyncNotifier<CatalogSnapshot> {
     if (!ref.mounted) {
       return;
     }
+    ref.read(catalogMutationVersionProvider.notifier).bump();
     // Reload even when post-DB file cleanup fails so UI matches committed DB state.
     try {
       await _reloadSnapshot();
