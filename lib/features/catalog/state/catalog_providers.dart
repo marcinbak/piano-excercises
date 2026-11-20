@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_batch_import_planner.dart';
@@ -7,14 +6,22 @@ import 'package:piano_exercises/features/catalog/domain/catalog_import_coordinat
 import 'package:piano_exercises/features/catalog/domain/catalog_query.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_repository.dart';
 import 'package:piano_exercises/features/catalog/domain/difficulty_tier.dart';
-import 'package:piano_exercises/features/catalog/domain/in_memory_catalog_repository.dart';
 import 'package:piano_exercises/features/catalog/domain/piece.dart';
-import 'package:piano_exercises/features/catalog/domain/score_file_store.dart';
 import 'package:piano_exercises/features/catalog/domain/score_import_source.dart';
 import 'package:piano_exercises/features/catalog/domain/score_parser.dart';
+import 'package:piano_exercises/features/catalog/state/catalog_dependencies.dart';
 import 'package:piano_exercises/features/catalog/state/catalog_query_state.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
+export 'package:piano_exercises/features/catalog/state/catalog_dependencies.dart'
+    show
+        catalogClockMsProvider,
+        catalogIdGeneratorProvider,
+        catalogImportCoordinatorProvider,
+        catalogRepositoryProvider,
+        scoreFileStoreProvider,
+        scoreImportSourceProvider,
+        scoreParserProvider;
 export 'package:piano_exercises/features/catalog/state/catalog_query_state.dart'
     show
         CatalogErrorNotifier,
@@ -22,63 +29,6 @@ export 'package:piano_exercises/features/catalog/state/catalog_query_state.dart'
         CatalogSnapshot,
         catalogErrorProvider,
         catalogQueryProvider;
-
-/// Parses imported `.mxl` and `.musicxml` score bytes; overridden in `app/` and tests.
-final scoreParserProvider = Provider<ScoreParser>((ref) {
-  throw UnimplementedError(
-    'scoreParserProvider must be overridden in ProviderScope.',
-  );
-});
-
-/// Catalog metadata persistence boundary; overridden in `app/` and tests.
-final catalogRepositoryProvider = Provider<CatalogRepository>((ref) {
-  final repository = InMemoryCatalogRepository();
-  ref.onDispose(() {
-    unawaited(repository.close());
-  });
-  return repository;
-});
-
-/// Score file storage boundary; overridden in `app/` and tests.
-final scoreFileStoreProvider = Provider<ScoreFileStore>((ref) {
-  return InMemoryScoreFileStore();
-});
-
-/// Interactive score file picker and parser boundary; overridden in `app/` and tests.
-final scoreImportSourceProvider = Provider<ScoreImportSource>((ref) {
-  throw UnimplementedError(
-    'scoreImportSourceProvider must be overridden in ProviderScope.',
-  );
-});
-
-/// Wall-clock timestamp source (ms since epoch); overridable in tests.
-final catalogClockMsProvider = Provider<int Function()>((ref) {
-  return () => DateTime.now().millisecondsSinceEpoch;
-});
-
-/// Generates safe alphanumeric IDs for imported pieces and variants.
-final catalogIdGeneratorProvider = Provider<String Function()>((ref) {
-  var counter = 0;
-  final random = math.Random.secure();
-  return () {
-    counter += 1;
-    final micros = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
-    final salt = random.nextInt(0x7fffffff).toRadixString(36);
-    return 'c_${micros}_${counter}_$salt';
-  };
-});
-
-/// Coordinates atomic file writes with catalog repository transactions.
-final catalogImportCoordinatorProvider = Provider<CatalogImportCoordinator>((
-  ref,
-) {
-  return CatalogImportCoordinator(
-    catalogRepository: ref.watch(catalogRepositoryProvider),
-    scoreFileStore: ref.watch(scoreFileStoreProvider),
-    clockMs: ref.watch(catalogClockMsProvider),
-    generateId: ref.watch(catalogIdGeneratorProvider),
-  );
-});
 
 /// Manages catalog query results and runtime `.mxl`/`.musicxml` import mutations.
 class CatalogController extends AsyncNotifier<CatalogSnapshot> {
