@@ -28,43 +28,27 @@ void toggleNextPartnerTie(
   required DraftNoteEvent source,
   required bool enableTie,
 }) {
-  final measureBeats = activeDraftTimeAt(
+  final measureBeats = effectiveDraftMeasureBeats(
     draft.timeSignature,
-    measures,
+    draft.measures,
     sourceMeasureIdx,
-  ).measureQuarterBeats;
-  final int partnerIdx;
-  final RationalBeats partnerOffset;
-  if (source.endOffset >= measureBeats) {
-    partnerIdx = sourceMeasureIdx + 1;
-    partnerOffset = const RationalBeats.zero();
-  } else {
-    partnerIdx = sourceMeasureIdx;
-    partnerOffset = source.endOffset;
-  }
-  if (partnerIdx >= measures.length) {
-    return;
-  }
-  for (final candidate in measures[partnerIdx].notes) {
-    if (candidate.beatOffset == partnerOffset &&
-        candidate.staffNote.clef == source.staffNote.clef &&
-        candidate.staffNote.midiNote == source.staffNote.midiNote) {
-      final nextTie = enableTie
-          ? (candidate.tie == TieType.start
-                ? TieType.continueTie
-                : TieType.stop)
-          : (candidate.tie == TieType.continueTie
-                ? TieType.start
-                : TieType.none);
-      replaceSingleDraftNote(
-        measures,
-        partnerIdx,
-        candidate,
-        candidate.copyWith(tie: nextTie),
-      );
-      return;
-    }
-  }
+  );
+  final crossesBar = source.endOffset >= measureBeats;
+  final partnerIdx = crossesBar ? sourceMeasureIdx + 1 : sourceMeasureIdx;
+  final partnerOffset = crossesBar
+      ? const RationalBeats.zero()
+      : source.endOffset;
+  _updateMatchingPartnerTie(
+    measures,
+    partnerIdx,
+    matches: (n) =>
+        n.beatOffset == partnerOffset &&
+        n.staffNote.clef == source.staffNote.clef &&
+        n.staffNote.midiNote == source.staffNote.midiNote,
+    nextTie: (t) => enableTie
+        ? (t == TieType.start ? TieType.continueTie : TieType.stop)
+        : (t == TieType.continueTie ? TieType.start : TieType.none),
+  );
 }
 
 /// Inserts a beat-width gap at [cursor] and cascades overflow into subsequent bars.
@@ -90,90 +74,115 @@ List<DraftMeasure> rippleInsertGap(
       measures,
       mIdx,
     ).measureQuarterBeats;
-    final keepBefore = <DraftNoteEvent>[];
-    final candidates = <DraftNoteEvent>[...incoming];
-
-    for (final note in measure.notes) {
-      if (mIdx == cursor.measureIndex && note.beatOffset < cursor.beatOffset) {
-        keepBefore.add(note);
-      } else {
-        candidates.add(
-          note.copyWith(beatOffset: note.beatOffset + shiftAmount),
-        );
-      }
-    }
-
-    final keptInMeasure = <DraftNoteEvent>[...keepBefore];
-    final nextIncoming = <DraftNoteEvent>[];
-    var maxOverflowEnd = const RationalBeats.zero();
-
-    for (final note in candidates) {
-      if (note.beatOffset >= measureBeats) {
-        final overflow = note.copyWith(
-          beatOffset: note.beatOffset - measureBeats,
-        );
-        nextIncoming.add(overflow);
-        if (overflow.endOffset > maxOverflowEnd) {
-          maxOverflowEnd = overflow.endOffset;
-        }
-      } else if (note.endOffset > measureBeats) {
-        final inParts = splitDuration(measureBeats - note.beatOffset);
-        final outParts = splitDuration(note.endOffset - measureBeats);
-        final hadIncoming =
-            note.tie == TieType.stop || note.tie == TieType.continueTie;
-        final hadOutgoing =
-            note.tie == TieType.start || note.tie == TieType.continueTie;
-        final total = inParts.length + outParts.length;
-        var pos = note.beatOffset;
-        var combinedIdx = 0;
-        for (final dur in inParts) {
-          keptInMeasure.add(
-            note.copyWith(
-              beatOffset: pos,
-              duration: dur,
-              tie: _splitPartTie(
-                combinedIdx,
-                total,
-                hadIncoming: hadIncoming,
-                hadOutgoing: hadOutgoing,
-              ),
-              clearExplicitAccidental: combinedIdx > 0,
-            ),
-          );
-          pos = pos + dur.quarterBeats;
-          combinedIdx += 1;
-        }
-        var outPos = const RationalBeats.zero();
-        for (final dur in outParts) {
-          nextIncoming.add(
-            note.copyWith(
-              beatOffset: outPos,
-              duration: dur,
-              tie: _splitPartTie(
-                combinedIdx,
-                total,
-                hadIncoming: hadIncoming,
-                hadOutgoing: hadOutgoing,
-              ),
-              clearExplicitAccidental: true,
-            ),
-          );
-          outPos = outPos + dur.quarterBeats;
-          combinedIdx += 1;
-        }
-        if (outPos > maxOverflowEnd) {
-          maxOverflowEnd = outPos;
-        }
-      } else {
-        keptInMeasure.add(note);
-      }
-    }
-
-    measures[mIdx] = measure.copyWith(notes: keptInMeasure);
-    incoming = nextIncoming;
-    shiftAmount = maxOverflowEnd;
+    final split = _ripplePartitionMeasure(
+      measure,
+      incoming: incoming,
+      measureBeats: measureBeats,
+      shiftAmount: shiftAmount,
+      splitAtBeat: mIdx == cursor.measureIndex ? cursor.beatOffset : null,
+    );
+    measures[mIdx] = measure.copyWith(notes: split.kept);
+    incoming = split.overflow;
+    shiftAmount = split.maxOverflowEnd;
   }
   return measures;
+}
+
+({
+  List<DraftNoteEvent> kept,
+  List<DraftNoteEvent> overflow,
+  RationalBeats maxOverflowEnd,
+})
+_ripplePartitionMeasure(
+  DraftMeasure measure, {
+  required List<DraftNoteEvent> incoming,
+  required RationalBeats measureBeats,
+  required RationalBeats shiftAmount,
+  RationalBeats? splitAtBeat,
+}) {
+  final keptInMeasure = <DraftNoteEvent>[];
+  final candidates = <DraftNoteEvent>[...incoming];
+  for (final note in measure.notes) {
+    if (splitAtBeat != null && note.beatOffset < splitAtBeat) {
+      keptInMeasure.add(note);
+    } else {
+      candidates.add(note.copyWith(beatOffset: note.beatOffset + shiftAmount));
+    }
+  }
+
+  final nextIncoming = <DraftNoteEvent>[];
+  var maxOverflowEnd = const RationalBeats.zero();
+  for (final note in candidates) {
+    if (note.beatOffset >= measureBeats) {
+      final overflow = note.copyWith(
+        beatOffset: note.beatOffset - measureBeats,
+      );
+      nextIncoming.add(overflow);
+      if (overflow.endOffset > maxOverflowEnd) {
+        maxOverflowEnd = overflow.endOffset;
+      }
+    } else if (note.endOffset > measureBeats) {
+      final overflowEnd = _splitBarlineCrossingNote(
+        note,
+        measureBeats: measureBeats,
+        keptInMeasure: keptInMeasure,
+        nextIncoming: nextIncoming,
+      );
+      if (overflowEnd > maxOverflowEnd) {
+        maxOverflowEnd = overflowEnd;
+      }
+    } else {
+      keptInMeasure.add(note);
+    }
+  }
+  return (
+    kept: keptInMeasure,
+    overflow: nextIncoming,
+    maxOverflowEnd: maxOverflowEnd,
+  );
+}
+
+RationalBeats _splitBarlineCrossingNote(
+  DraftNoteEvent note, {
+  required RationalBeats measureBeats,
+  required List<DraftNoteEvent> keptInMeasure,
+  required List<DraftNoteEvent> nextIncoming,
+}) {
+  final inParts = splitDuration(measureBeats - note.beatOffset);
+  final outParts = splitDuration(note.endOffset - measureBeats);
+  final hadIncoming =
+      note.tie == TieType.stop || note.tie == TieType.continueTie;
+  final hadOutgoing =
+      note.tie == TieType.start || note.tie == TieType.continueTie;
+  final total = inParts.length + outParts.length;
+  var combinedIdx = 0;
+  var lastPos = const RationalBeats.zero();
+  for (final phase
+      in <(List<DurationValue>, RationalBeats, List<DraftNoteEvent>)>[
+        (inParts, note.beatOffset, keptInMeasure),
+        (outParts, const RationalBeats.zero(), nextIncoming),
+      ]) {
+    var pos = phase.$2;
+    for (final dur in phase.$1) {
+      phase.$3.add(
+        note.copyWith(
+          beatOffset: pos,
+          duration: dur,
+          tie: _splitPartTie(
+            combinedIdx,
+            total,
+            hadIncoming: hadIncoming,
+            hadOutgoing: hadOutgoing,
+          ),
+          clearExplicitAccidental: combinedIdx > 0,
+        ),
+      );
+      pos = pos + dur.quarterBeats;
+      combinedIdx += 1;
+    }
+    lastPos = pos;
+  }
+  return lastPos;
 }
 
 TieType _splitPartTie(
@@ -197,44 +206,26 @@ void _clearIncomingPartnerTie(
   int measureIdx,
   DraftNoteEvent source,
 ) {
-  final measureBeats = activeDraftTimeAt(
+  final measureBeats = effectiveDraftMeasureBeats(
     draft.timeSignature,
     draft.measures,
     measureIdx,
-  ).measureQuarterBeats;
-  final int targetIdx;
-  final RationalBeats targetOffset;
-  if (source.endOffset >= measureBeats) {
-    targetIdx = measureIdx + 1;
-    targetOffset = const RationalBeats.zero();
-  } else {
-    targetIdx = measureIdx;
-    targetOffset = source.endOffset;
-  }
-  if (targetIdx < 0 || targetIdx >= measures.length) {
-    return;
-  }
-  final targetMeasure = measures[targetIdx];
-  var changed = false;
-  final nextNotes = <DraftNoteEvent>[
-    for (final note in targetMeasure.notes)
-      if (!changed &&
-          note.beatOffset == targetOffset &&
-          note.staffNote.clef == source.staffNote.clef &&
-          note.staffNote.midiNote == source.staffNote.midiNote &&
-          (note.tie == TieType.stop || note.tie == TieType.continueTie))
-        (() {
-          changed = true;
-          return note.copyWith(
-            tie: note.tie == TieType.continueTie ? TieType.start : TieType.none,
-          );
-        })()
-      else
-        note,
-  ];
-  if (changed) {
-    measures[targetIdx] = targetMeasure.copyWith(notes: nextNotes);
-  }
+  );
+  final crossesBar = source.endOffset >= measureBeats;
+  final targetIdx = crossesBar ? measureIdx + 1 : measureIdx;
+  final targetOffset = crossesBar
+      ? const RationalBeats.zero()
+      : source.endOffset;
+  _updateMatchingPartnerTie(
+    measures,
+    targetIdx,
+    matches: (n) =>
+        n.beatOffset == targetOffset &&
+        n.staffNote.clef == source.staffNote.clef &&
+        n.staffNote.midiNote == source.staffNote.midiNote &&
+        (n.tie == TieType.stop || n.tie == TieType.continueTie),
+    nextTie: (t) => t == TieType.continueTie ? TieType.start : TieType.none,
+  );
 }
 
 void _clearOutgoingPartnerTie(
@@ -243,36 +234,47 @@ void _clearOutgoingPartnerTie(
   int measureIdx,
   DraftNoteEvent source,
 ) {
-  final int targetIdx;
-  final RationalBeats targetEnd;
-  if (source.beatOffset.isZero) {
-    targetIdx = measureIdx - 1;
-    if (targetIdx < 0) {
-      return;
-    }
-    targetEnd = activeDraftTimeAt(
-      draft.timeSignature,
-      draft.measures,
-      targetIdx,
-    ).measureQuarterBeats;
-  } else {
-    targetIdx = measureIdx;
-    targetEnd = source.beatOffset;
+  final crossesBack = source.beatOffset.isZero;
+  final targetIdx = crossesBack ? measureIdx - 1 : measureIdx;
+  if (targetIdx < 0) {
+    return;
+  }
+  final targetEnd = crossesBack
+      ? effectiveDraftMeasureBeats(
+          draft.timeSignature,
+          draft.measures,
+          targetIdx,
+        )
+      : source.beatOffset;
+  _updateMatchingPartnerTie(
+    measures,
+    targetIdx,
+    matches: (n) =>
+        n.endOffset == targetEnd &&
+        n.staffNote.clef == source.staffNote.clef &&
+        n.staffNote.midiNote == source.staffNote.midiNote &&
+        (n.tie == TieType.start || n.tie == TieType.continueTie),
+    nextTie: (t) => t == TieType.continueTie ? TieType.stop : TieType.none,
+  );
+}
+
+void _updateMatchingPartnerTie(
+  List<DraftMeasure> measures,
+  int targetIdx, {
+  required bool Function(DraftNoteEvent note) matches,
+  required TieType Function(TieType current) nextTie,
+}) {
+  if (targetIdx < 0 || targetIdx >= measures.length) {
+    return;
   }
   final targetMeasure = measures[targetIdx];
   var changed = false;
   final nextNotes = <DraftNoteEvent>[
     for (final note in targetMeasure.notes)
-      if (!changed &&
-          note.endOffset == targetEnd &&
-          note.staffNote.clef == source.staffNote.clef &&
-          note.staffNote.midiNote == source.staffNote.midiNote &&
-          (note.tie == TieType.start || note.tie == TieType.continueTie))
+      if (!changed && matches(note))
         (() {
           changed = true;
-          return note.copyWith(
-            tie: note.tie == TieType.continueTie ? TieType.stop : TieType.none,
-          );
+          return note.copyWith(tie: nextTie(note.tie));
         })()
       else
         note,

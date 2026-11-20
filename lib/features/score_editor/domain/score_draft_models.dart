@@ -200,3 +200,37 @@ bool draftListsEqual<T>(List<T> a, List<T> b) {
   }
   return true;
 }
+
+/// Resolves written quarter-beat span for [measureIdx], preserving pickup bar lengths.
+RationalBeats effectiveDraftMeasureBeats(
+  TimeSignature rootTime,
+  List<DraftMeasure> measures,
+  int measureIdx,
+) {
+  var active = rootTime;
+  if (measures.isNotEmpty) {
+    final limit = measureIdx.clamp(0, measures.length - 1);
+    for (var i = 0; i <= limit; i += 1) {
+      if (measures[i].timeSignature != null) {
+        active = measures[i].timeSignature!;
+      }
+    }
+  }
+  final measureBeats = active.measureQuarterBeats;
+  if (measureIdx < 0 || measureIdx >= measures.length) {
+    return measureBeats;
+  }
+  final dm = measures[measureIdx];
+  if (dm.measureNumber != 0 || dm.notes.isEmpty) {
+    return measureBeats;
+  }
+  var maxNoteEnd = const RationalBeats.zero();
+  for (final note in dm.notes) {
+    if (note.endOffset > maxNoteEnd) {
+      maxNoteEnd = note.endOffset;
+    }
+  }
+  return (maxNoteEnd > const RationalBeats.zero() && maxNoteEnd < measureBeats)
+      ? maxNoteEnd
+      : measureBeats;
+}

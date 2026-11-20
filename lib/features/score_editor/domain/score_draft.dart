@@ -9,7 +9,8 @@ export 'package:piano_exercises/features/score_editor/domain/score_draft_models.
         DraftMeasure,
         DraftNoteEvent,
         EditorCursor,
-        compareDraftNotes;
+        compareDraftNotes,
+        effectiveDraftMeasureBeats;
 
 /// Immutable score-editor document state lowered to a playable [Score] on demand.
 final class ScoreDraft {
@@ -141,22 +142,14 @@ final class ScoreDraft {
   Score toScore() {
     var activeTime = timeSignature;
     final timelineMeasures = <MeasureTimelineInput>[];
-    for (final dm in measures) {
+    for (var i = 0; i < measures.length; i += 1) {
+      final dm = measures[i];
       activeTime = dm.timeSignature ?? activeTime;
-      final measureBeats = activeTime.measureQuarterBeats;
-      var effectiveMeasureBeats = measureBeats;
-      if (dm.measureNumber == 0 && dm.notes.isNotEmpty) {
-        var maxNoteEnd = const RationalBeats.zero();
-        for (final note in dm.notes) {
-          if (note.endOffset > maxNoteEnd) {
-            maxNoteEnd = note.endOffset;
-          }
-        }
-        if (maxNoteEnd > const RationalBeats.zero() &&
-            maxNoteEnd < measureBeats) {
-          effectiveMeasureBeats = maxNoteEnd;
-        }
-      }
+      final effectiveMeasureBeats = effectiveDraftMeasureBeats(
+        timeSignature,
+        measures,
+        i,
+      );
       final rawNotes = <NoteTimelineInput>[
         for (final note in dm.notes)
           NoteTimelineInput(

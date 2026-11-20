@@ -588,5 +588,73 @@ void main() {
       expect(reparsed.measures[0].slices, hasLength(1));
       expect(reparsed.measures[0].slices.single.beatDuration, RationalBeats(1));
     });
+
+    test(
+      'pickup bar cross-barline ties toggle and heal in both directions',
+      () {
+        final quarter = DurationValue(base: NoteBaseDuration.quarter);
+        final pickupScore = ScoreTimelineReducer.reduce(
+          title: 'Pickup Ties',
+          initialScale: Scale.fromKeySignature(KeySignature.cMajor),
+          initialTimeSignature: TimeSignature.common,
+          measures: <MeasureTimelineInput>[
+            MeasureTimelineInput(
+              measureNumber: 0,
+              notes: <NoteTimelineInput>[
+                NoteTimelineInput(
+                  clef: Clef.treble,
+                  diatonicNote: DiatonicNote.c,
+                  octave: 5,
+                  explicitAlter: 0,
+                  beatOffset: const RationalBeats.zero(),
+                  duration: quarter,
+                ),
+              ],
+              rests: <RestTimelineInput>[
+                RestTimelineInput(
+                  clef: Clef.bass,
+                  beatOffset: const RationalBeats.zero(),
+                  duration: quarter,
+                ),
+              ],
+            ),
+            MeasureTimelineInput(
+              measureNumber: 1,
+              notes: <NoteTimelineInput>[
+                NoteTimelineInput(
+                  clef: Clef.treble,
+                  diatonicNote: DiatonicNote.c,
+                  octave: 5,
+                  explicitAlter: 0,
+                  beatOffset: const RationalBeats.zero(),
+                  duration: quarter,
+                ),
+              ],
+            ),
+          ],
+        );
+
+        final draft = ScoreDraft.fromScore(pickupScore);
+        final tied = draft.toggleTieAtCursor();
+        expect(tied.measures[0].notes.single.tie, TieType.start);
+        expect(tied.measures[1].notes.single.tie, TieType.stop);
+
+        final untied = tied.toggleTieAtCursor();
+        expect(untied.measures[0].notes.single.tie, TieType.none);
+        expect(untied.measures[1].notes.single.tie, TieType.none);
+
+        // Deleting pickup bar note heals incoming tie on measure 1 beat 0.
+        final deletedPickup = tied.deleteAtCursor();
+        expect(deletedPickup.measures[0].notes, isEmpty);
+        expect(deletedPickup.measures[1].notes.single.tie, TieType.none);
+
+        // Deleting measure 1 beat 0 note heals outgoing tie on pickup bar.
+        final deletedNextBar = tied
+            .copyWith(cursor: const EditorCursor(measureIndex: 1))
+            .deleteAtCursor();
+        expect(deletedNextBar.measures[0].notes.single.tie, TieType.none);
+        expect(deletedNextBar.measures[1].notes, isEmpty);
+      },
+    );
   });
 }
