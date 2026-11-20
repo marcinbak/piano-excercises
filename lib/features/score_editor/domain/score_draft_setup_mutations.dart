@@ -73,15 +73,22 @@ extension ScoreDraftSetupMutations on ScoreDraft {
     }
     var nextCursor = cursor;
     if (timeSignature != null) {
-      if (nextMeasures.first.timeSignature != null) {
-        nextMeasures[0] = nextMeasures[0].copyWith(clearTimeSignature: true);
-      }
       final newSpan = timeSignature.measureQuarterBeats;
       for (var i = 0; i < nextMeasures.length; i += 1) {
         if (i > 0 && nextMeasures[i].timeSignature != null) {
           break;
         }
-        nextMeasures[i] = clampMeasureNotesToSpan(nextMeasures[i], newSpan);
+        final clamped = clampMeasureNotesToSpan(nextMeasures[i], newSpan);
+        nextMeasures[i] = clamped.measure;
+        healNeighborTies(
+          this,
+          nextMeasures,
+          measureIdx: i,
+          removed: clamped.brokenNotes,
+        );
+      }
+      if (nextMeasures.first.timeSignature != null) {
+        nextMeasures[0] = nextMeasures[0].copyWith(clearTimeSignature: true);
       }
       final activeSpan = activeDraftTimeAt(
         timeSignature,

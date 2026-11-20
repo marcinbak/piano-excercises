@@ -33,6 +33,7 @@ extension ScoreDraftPitchMutations on ScoreDraft {
       }
       writeSegmentedChord(
         plan.measures,
+        draft: this,
         segments: plan.segments,
         entries: <({StaffNote staffNote, Accidental? explicitAccidental})>[
           (staffNote: spelled, explicitAccidental: null),
@@ -135,13 +136,23 @@ extension ScoreDraftPitchMutations on ScoreDraft {
           ? accidental
           : target.explicitAccidental;
     }
+    final pitchChanged = updatedStaffNote != target.staffNote;
     final nextMeasures = List<DraftMeasure>.of(measures);
+    if (pitchChanged) {
+      healNeighborTies(
+        this,
+        nextMeasures,
+        measureIdx: cursor.measureIndex,
+        removed: <DraftNoteEvent>[target],
+      );
+    }
     replaceSingleDraftNote(
       nextMeasures,
       cursor.measureIndex,
       target,
       target.copyWith(
         staffNote: updatedStaffNote,
+        tie: pitchChanged ? TieType.none : target.tie,
         explicitAccidental: forced,
         clearExplicitAccidental: forced == null,
       ),
@@ -166,11 +177,17 @@ extension ScoreDraftPitchMutations on ScoreDraft {
       accidental: target.staffNote.accidental,
     );
     final nextMeasures = List<DraftMeasure>.of(measures);
+    healNeighborTies(
+      this,
+      nextMeasures,
+      measureIdx: cursor.measureIndex,
+      removed: <DraftNoteEvent>[target],
+    );
     replaceSingleDraftNote(
       nextMeasures,
       cursor.measureIndex,
       target,
-      target.copyWith(staffNote: updatedNote),
+      target.copyWith(staffNote: updatedNote, tie: TieType.none),
     );
     return copyWith(measures: nextMeasures);
   }

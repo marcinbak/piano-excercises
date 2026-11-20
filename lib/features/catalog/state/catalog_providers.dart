@@ -26,7 +26,8 @@ export 'package:piano_exercises/features/catalog/state/catalog_dependencies.dart
         scoreFileStoreProvider,
         scoreImportSourceProvider,
         scoreParserProvider,
-        scoreSerializerProvider;
+        scoreSerializerProvider,
+        unfilteredCatalogPiecesProvider;
 export 'package:piano_exercises/features/catalog/state/catalog_query_state.dart'
     show
         CatalogErrorNotifier,

@@ -38,6 +38,9 @@ class PieceScoreScreen extends ConsumerStatefulWidget {
 }
 
 class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
+  static int _nextRouteId = 1;
+
+  late final int _routeId = _nextRouteId++;
   late ScoreVariant _selectedVariant;
   int _modalPauseDepth = 0;
   bool _wasExternallyPausedBeforeModal = false;
@@ -81,6 +84,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   Widget build(BuildContext context) {
     // Retain autoDispose paused state across AsyncLoading before controller mounts.
     ref.listen<bool>(practicePausedProvider, (_, _) {});
+    ref.listen<bool>(practiceRoutePausedProvider(_routeId), (_, _) {});
     final effectivePiece =
         ref.watch(livePieceProvider(widget.piece.id)).value ?? widget.piece;
     final activeVariant = _resolveActiveVariant(effectivePiece);
@@ -147,6 +151,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
         : PracticeSessionKey(
             variantId: data.activeVariant.id,
             score: loadedScore,
+            routeId: _routeId,
           );
     final sessionState = sessionKey == null
         ? null
@@ -206,8 +211,9 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
 
   void _pauseBeforeModal() {
     if (_modalPauseDepth == 0) {
-      _wasExternallyPausedBeforeModal = ref.read(practicePausedProvider);
-      ref.read(practicePausedProvider.notifier).setPaused(true);
+      final routePaused = ref.read(practiceRoutePausedProvider(_routeId));
+      _wasExternallyPausedBeforeModal = routePaused;
+      ref.read(practiceRoutePausedProvider(_routeId).notifier).setPaused(true);
     }
     _modalPauseDepth += 1;
   }
@@ -219,7 +225,7 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     if (!mounted || _modalPauseDepth > 0 || _wasExternallyPausedBeforeModal) {
       return;
     }
-    ref.read(practicePausedProvider.notifier).setPaused(false);
+    ref.read(practiceRoutePausedProvider(_routeId).notifier).setPaused(false);
   }
 
   Future<void> _openLoopSheet(

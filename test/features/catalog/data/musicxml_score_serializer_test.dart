@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
+import 'package:piano_exercises/features/catalog/data/musicxml_note_serializer.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
 void main() {
@@ -280,6 +282,103 @@ void main() {
       expect(
         roundTripped.measures[2].slices.single.bassRest?.duration.quarterBeats,
         RationalBeats(4),
+      );
+    });
+
+    test('serializes triplet-division gap rests with positive ticks and rejects divisions > 16384', () {
+      final tripletEighth = DurationValue(
+        base: NoteBaseDuration.eighth,
+        quarterBeats: RationalBeats(1, 3),
+      );
+      final tripletScore = ScoreTimelineReducer.reduce(
+        title: 'Triplet Gap',
+        initialScale: Scale.fromKeySignature(KeySignature.cMajor),
+        initialTimeSignature: TimeSignature.common,
+        measures: <MeasureTimelineInput>[
+          MeasureTimelineInput(
+            measureNumber: 1,
+            notes: <NoteTimelineInput>[
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.c,
+                octave: 5,
+                explicitAlter: 0,
+                beatOffset: const RationalBeats.zero(),
+                duration: tripletEighth,
+              ),
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.e,
+                octave: 5,
+                explicitAlter: 0,
+                beatOffset: RationalBeats(2, 3),
+                duration: tripletEighth,
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final bytes = serializer.serialize(tripletScore);
+      final xmlText = utf8.decode(bytes);
+      expect(xmlText.contains('<duration>0</duration>'), isFalse);
+
+      final reparsed = parser
+          .parseBytes(bytes, fileName: 'triplet_gap.musicxml')
+          .score;
+      expect(
+        reparsed.measures.single.slices[0].beatOffset,
+        const RationalBeats.zero(),
+      );
+      expect(
+        reparsed.measures.single.slices[1].beatOffset,
+        RationalBeats(1, 3),
+      );
+      expect(
+        reparsed.measures.single.slices[1].trebleRest?.duration.quarterBeats,
+        RationalBeats(1, 3),
+      );
+      expect(
+        reparsed.measures.single.slices[2].beatOffset,
+        RationalBeats(2, 3),
+      );
+
+      // Excess divisions (> 16384) throws ScoreParseException instead of writing invalid XML.
+      final primeDens = <int>[2, 3, 5, 7, 11, 13];
+      var offset = const RationalBeats.zero();
+      final badNotes = <NoteTimelineInput>[];
+      for (final den in primeDens) {
+        final dur = DurationValue(
+          base: NoteBaseDuration.sixtyFourth,
+          quarterBeats: RationalBeats(1, den),
+        );
+        badNotes.add(
+          NoteTimelineInput(
+            clef: Clef.treble,
+            diatonicNote: DiatonicNote.c,
+            octave: 4,
+            explicitAlter: 0,
+            beatOffset: offset,
+            duration: dur,
+          ),
+        );
+        offset = offset + dur.quarterBeats;
+      }
+      final overflowScore = ScoreTimelineReducer.reduce(
+        title: 'Overflow Divisions',
+        initialScale: Scale.fromKeySignature(KeySignature.cMajor),
+        initialTimeSignature: TimeSignature.common,
+        measures: <MeasureTimelineInput>[
+          MeasureTimelineInput(measureNumber: 1, notes: badNotes),
+        ],
+      );
+      expect(
+        () => serializer.serialize(overflowScore),
+        throwsA(isA<ScoreParseException>()),
+      );
+      expect(
+        () => musicXmlLcm(10000000000, 10000000001),
+        throwsA(isA<ScoreParseException>()),
       );
     });
   });

@@ -1,5 +1,9 @@
+import 'package:piano_exercises/features/catalog/domain/score_parser.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 import 'package:xml/xml.dart';
+
+/// Maximum MusicXML `<divisions>` value accepted by [MusicXmlScoreParser].
+const int maxMusicXmlDivisions = 16384;
 
 /// Writes a pitched `<note>` element (with optional `<chord/>`, ties, and `<beam>`).
 void writeMusicXmlPitchedNote(
@@ -126,17 +130,18 @@ void writeMusicXmlForward(XmlBuilder builder, int ticks) {
   );
 }
 
-/// Chooses the largest standard rest duration fitting in [remaining] at [cursor].
+/// Chooses the largest standard rest duration fitting [remaining] with integer [divisions] ticks.
 DurationValue largestMusicXmlRestDuration(
   RationalBeats cursor,
-  RationalBeats remaining,
-) {
+  RationalBeats remaining, {
+  required int divisions,
+}) {
   final candidates = <DurationValue>[
     for (final base in NoteBaseDuration.values) DurationValue(base: base),
   ];
   for (final candidate in candidates) {
     final q = candidate.quarterBeats;
-    if (q > remaining) {
+    if (q > remaining || !_isExactDivisionTicks(q, divisions)) {
       continue;
     }
     if (cursor.denominator > 1 && q.denominator == 1) {
@@ -145,7 +150,8 @@ DurationValue largestMusicXmlRestDuration(
     return candidate;
   }
   for (final candidate in candidates) {
-    if (candidate.quarterBeats <= remaining) {
+    final q = candidate.quarterBeats;
+    if (q <= remaining && _isExactDivisionTicks(q, divisions)) {
       return candidate;
     }
   }
@@ -155,22 +161,41 @@ DurationValue largestMusicXmlRestDuration(
   );
 }
 
+bool _isExactDivisionTicks(RationalBeats beats, int divisions) {
+  final div = BigInt.from(divisions);
+  final num = BigInt.from(beats.numerator) * div;
+  final den = BigInt.from(beats.denominator);
+  return num >= den && (num % den) == BigInt.zero;
+}
+
 int musicXmlBeatsToTicks(RationalBeats beats, int divisions) {
-  return (beats.numerator * divisions) ~/ beats.denominator;
+  if (divisions < 1 || divisions > maxMusicXmlDivisions) {
+    throw ScoreParseException('Invalid MusicXML <divisions> value: $divisions');
+  }
+  final ticks =
+      (BigInt.from(beats.numerator) * BigInt.from(divisions)) ~/
+      BigInt.from(beats.denominator);
+  if (!ticks.isValidInt) {
+    throw ScoreParseException(
+      'MusicXML duration ticks ($ticks) exceed 64-bit range.',
+    );
+  }
+  return ticks.toInt();
 }
 
 int musicXmlLcm(int a, int b) {
   if (a <= 0 || b <= 0) {
     return 1;
   }
-  var x = a;
-  var y = b;
-  while (y != 0) {
-    final rem = x % y;
-    x = y;
-    y = rem;
+  final ba = BigInt.from(a);
+  final bb = BigInt.from(b);
+  final result = (ba ~/ ba.gcd(bb)) * bb;
+  if (!result.isValidInt || result > BigInt.from(maxMusicXmlDivisions)) {
+    throw ScoreParseException(
+      'Required MusicXML <divisions> ($result) exceeds limit $maxMusicXmlDivisions.',
+    );
   }
-  return (a ~/ x) * b;
+  return result.toInt();
 }
 
 void _writeTieElements(XmlBuilder builder, TieType tie) {

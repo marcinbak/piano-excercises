@@ -107,7 +107,7 @@ class ScoreEditorController extends Notifier<ScoreEditorState> {
 
   void undo() {
     final nextState = state.steppedUndo();
-    if (!ref.mounted || nextState == null) {
+    if (!ref.mounted || _isUnavailable || nextState == null) {
       return;
     }
     _coalescer.resetActivePrompt();
@@ -116,7 +116,7 @@ class ScoreEditorController extends Notifier<ScoreEditorState> {
 
   void redo() {
     final nextState = state.steppedRedo();
-    if (!ref.mounted || nextState == null) {
+    if (!ref.mounted || _isUnavailable || nextState == null) {
       return;
     }
     _coalescer.resetActivePrompt();
@@ -150,7 +150,7 @@ class ScoreEditorController extends Notifier<ScoreEditorState> {
   );
 
   void cycleSelectedNote() {
-    if (!ref.mounted) {
+    if (!ref.mounted || _isUnavailable) {
       return;
     }
     final count = state.draft.notesAtCursor.length;
@@ -258,8 +258,10 @@ class ScoreEditorController extends Notifier<ScoreEditorState> {
     }, fireImmediately: true);
   }
 
+  bool get _isUnavailable => state.isLoadingVariant || state.loadError != null;
+
   void _onChordFlush(MidiChordFlush flush) {
-    if (!ref.mounted || _coalescer.isPaused || state.isLoadingVariant) {
+    if (!ref.mounted || _coalescer.isPaused || _isUnavailable) {
       return;
     }
     final nextDraft = state.draft.enterMidiChord(flush.combinedNotes);
@@ -274,7 +276,7 @@ class ScoreEditorController extends Notifier<ScoreEditorState> {
     int? selectedNoteIndex,
     bool resetSelectionToFirst = false,
   }) {
-    if (!ref.mounted || nextDraft == state.draft) {
+    if (!ref.mounted || _isUnavailable || nextDraft == state.draft) {
       return;
     }
     final nextSelection = resetSelectionToFirst
@@ -288,7 +290,7 @@ class ScoreEditorController extends Notifier<ScoreEditorState> {
   }
 
   void _applyCursorMove(ScoreDraft nextDraft) {
-    if (!ref.mounted || nextDraft == state.draft) {
+    if (!ref.mounted || _isUnavailable || nextDraft == state.draft) {
       return;
     }
     _coalescer.resetActivePrompt();

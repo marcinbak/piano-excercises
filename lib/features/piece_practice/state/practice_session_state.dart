@@ -4,23 +4,29 @@ import 'package:piano_exercises/features/piece_practice/domain/polyphonic_evalua
 import 'package:piano_exercises/features/piece_practice/domain/score_practice_navigator.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
-/// Family key scoping a [PiecePracticeController] to a variant and parsed [Score].
+/// Family key scoping a [PiecePracticeController] to a variant, [Score], and route.
 final class PracticeSessionKey {
-  const PracticeSessionKey({required this.variantId, required this.score});
+  const PracticeSessionKey({
+    required this.variantId,
+    required this.score,
+    this.routeId = 0,
+  });
 
   final String variantId;
   final Score score;
+  final int routeId;
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
         (other is PracticeSessionKey &&
             other.variantId == variantId &&
+            other.routeId == routeId &&
             identical(other.score, score));
   }
 
   @override
-  int get hashCode => Object.hash(variantId, identityHashCode(score));
+  int get hashCode => Object.hash(variantId, routeId, identityHashCode(score));
 }
 
 /// Lifecycle status of a Wait-Mode piece practice session.

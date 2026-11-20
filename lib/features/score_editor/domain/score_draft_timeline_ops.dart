@@ -1,5 +1,6 @@
 import 'package:piano_exercises/features/score_editor/domain/rhythm_duration_splitter.dart';
 import 'package:piano_exercises/features/score_editor/domain/score_draft.dart';
+import 'package:piano_exercises/features/score_editor/domain/score_draft_tie_and_ripple_ops.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
 /// Single measure-bounded rhythmic segment produced by splitting across barlines.
@@ -134,14 +135,16 @@ planBarlineSegments(
   return (segments: segments, measures: measures, nextCursor: nextCursor);
 }
 
-/// Removes or trims notes on [clefs] overlapping `[start, end)` in [measure].
-DraftMeasure clearNoteSpanInMeasure(
+/// Removes or trims notes on [clefs] overlapping `[start, end)` and reports broken ties.
+({DraftMeasure measure, List<DraftNoteEvent> brokenNotes})
+clearNoteSpanInMeasure(
   DraftMeasure measure, {
   required Set<Clef> clefs,
   required RationalBeats start,
   required RationalBeats end,
 }) {
   final nextNotes = <DraftNoteEvent>[];
+  final brokenNotes = <DraftNoteEvent>[];
   for (final note in measure.notes) {
     if (!clefs.contains(note.staffNote.clef) ||
         note.endOffset <= start ||
@@ -150,42 +153,43 @@ DraftMeasure clearNoteSpanInMeasure(
       continue;
     }
     if (note.beatOffset < start) {
-      final parts = splitDuration(start - note.beatOffset);
-      var offset = note.beatOffset;
-      for (var i = 0; i < parts.length; i += 1) {
-        final isFirst = i == 0;
-        final hadIncoming =
-            note.tie == TieType.stop || note.tie == TieType.continueTie;
-        final nextTie = parts.length == 1
-            ? (hadIncoming ? TieType.stop : TieType.none)
-            : (isFirst
-                  ? (hadIncoming ? TieType.continueTie : TieType.start)
-                  : (i == parts.length - 1
-                        ? TieType.stop
-                        : TieType.continueTie));
-        nextNotes.add(
-          note.copyWith(
-            beatOffset: offset,
-            duration: parts[i],
-            tie: nextTie,
-            clearExplicitAccidental: !isFirst,
-          ),
-        );
-        offset = offset + parts[i].quarterBeats;
-      }
+      _appendTruncatedParts(nextNotes, note, start - note.beatOffset);
+      _recordBrokenOutgoingTie(brokenNotes, note);
+    } else {
+      brokenNotes.add(note);
     }
   }
-  return measure.copyWith(notes: nextNotes);
+  return (
+    measure: measure.copyWith(notes: nextNotes),
+    brokenNotes: brokenNotes,
+  );
 }
 
-/// Writes [entries] across barline [segments] on [measures] with ties.
+/// Writes [entries] across barline [segments] on [measures], healing overwritten ties.
 void writeSegmentedChord(
   List<DraftMeasure> measures, {
+  required ScoreDraft draft,
   required List<DraftSegment> segments,
   required List<({StaffNote staffNote, Accidental? explicitAccidental})>
   entries,
   required Set<Clef> affectedClefs,
 }) {
+  // Clear and heal all overwritten spans before inserting new segments so tie healing never strips newly written notes.
+  for (final seg in segments) {
+    final cleared = clearNoteSpanInMeasure(
+      measures[seg.measureIndex],
+      clefs: affectedClefs,
+      start: seg.beatOffset,
+      end: seg.endOffset,
+    );
+    measures[seg.measureIndex] = cleared.measure;
+    healNeighborTies(
+      draft,
+      measures,
+      measureIdx: seg.measureIndex,
+      removed: cleared.brokenNotes,
+    );
+  }
   final total = segments.length;
   for (var s = 0; s < total; s += 1) {
     final seg = segments[s];
@@ -196,14 +200,9 @@ void writeSegmentedChord(
         : s == total - 1
         ? TieType.stop
         : TieType.continueTie;
-    final cleared = clearNoteSpanInMeasure(
-      measures[seg.measureIndex],
-      clefs: affectedClefs,
-      start: seg.beatOffset,
-      end: seg.endOffset,
-    );
+    final dm = measures[seg.measureIndex];
     final added = <DraftNoteEvent>[
-      ...cleared.notes,
+      ...dm.notes,
       for (final entry in entries)
         DraftNoteEvent(
           staffNote: entry.staffNote,
@@ -213,37 +212,63 @@ void writeSegmentedChord(
           explicitAccidental: s == 0 ? entry.explicitAccidental : null,
         ),
     ];
-    measures[seg.measureIndex] = cleared.copyWith(notes: added);
+    measures[seg.measureIndex] = dm.copyWith(notes: added);
   }
 }
 
-/// Trims or drops notes that exceed [measureBeats] after a meter change.
-DraftMeasure clampMeasureNotesToSpan(
-  DraftMeasure measure,
-  RationalBeats measureBeats,
-) {
+/// Trims or drops notes exceeding [measureBeats] and reports notes needing neighbor tie healing.
+({DraftMeasure measure, List<DraftNoteEvent> brokenNotes})
+clampMeasureNotesToSpan(DraftMeasure measure, RationalBeats measureBeats) {
   final kept = <DraftNoteEvent>[];
+  final brokenNotes = <DraftNoteEvent>[];
   for (final note in measure.notes) {
     if (note.beatOffset >= measureBeats) {
+      brokenNotes.add(note);
       continue;
     }
     if (note.endOffset <= measureBeats) {
       kept.add(note);
       continue;
     }
-    final parts = splitDuration(measureBeats - note.beatOffset);
-    var offset = note.beatOffset;
-    for (var i = 0; i < parts.length; i += 1) {
-      kept.add(
-        note.copyWith(
-          beatOffset: offset,
-          duration: parts[i],
-          tie: TieType.none,
-          clearExplicitAccidental: i > 0,
-        ),
-      );
-      offset = offset + parts[i].quarterBeats;
-    }
+    _appendTruncatedParts(kept, note, measureBeats - note.beatOffset);
+    _recordBrokenOutgoingTie(brokenNotes, note);
   }
-  return measure.copyWith(notes: kept);
+  return (measure: measure.copyWith(notes: kept), brokenNotes: brokenNotes);
+}
+
+void _appendTruncatedParts(
+  List<DraftNoteEvent> out,
+  DraftNoteEvent note,
+  RationalBeats keepSpan,
+) {
+  final parts = splitDuration(keepSpan);
+  final hadIncoming =
+      note.tie == TieType.stop || note.tie == TieType.continueTie;
+  var offset = note.beatOffset;
+  for (var i = 0; i < parts.length; i += 1) {
+    final isFirst = i == 0;
+    final nextTie = parts.length == 1
+        ? (hadIncoming ? TieType.stop : TieType.none)
+        : (isFirst
+              ? (hadIncoming ? TieType.continueTie : TieType.start)
+              : (i == parts.length - 1 ? TieType.stop : TieType.continueTie));
+    out.add(
+      note.copyWith(
+        beatOffset: offset,
+        duration: parts[i],
+        tie: nextTie,
+        clearExplicitAccidental: !isFirst,
+      ),
+    );
+    offset = offset + parts[i].quarterBeats;
+  }
+}
+
+void _recordBrokenOutgoingTie(
+  List<DraftNoteEvent> brokenNotes,
+  DraftNoteEvent note,
+) {
+  if (note.tie == TieType.start || note.tie == TieType.continueTie) {
+    brokenNotes.add(note.copyWith(tie: TieType.start));
+  }
 }

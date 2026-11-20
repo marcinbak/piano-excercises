@@ -78,8 +78,8 @@ class _ScoreSaveSheetState extends ConsumerState<ScoreSaveSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final catalogSnapshot = ref.watch(catalogControllerProvider).value;
-    final existingPieces = catalogSnapshot?.pieces ?? const <Piece>[];
+    final existingPieces =
+        ref.watch(unfilteredCatalogPiecesProvider).value ?? const <Piece>[];
     final catalogError = ref.watch(catalogErrorProvider);
     final binding = widget.editorState.binding;
     final effectivePieceId =

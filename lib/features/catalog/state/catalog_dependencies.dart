@@ -6,6 +6,7 @@ import 'package:piano_exercises/features/catalog/domain/catalog_import_coordinat
 import 'package:piano_exercises/features/catalog/domain/catalog_repository.dart';
 import 'package:piano_exercises/features/catalog/domain/catalog_score_save_coordinator.dart';
 import 'package:piano_exercises/features/catalog/domain/in_memory_catalog_repository.dart';
+import 'package:piano_exercises/features/catalog/domain/piece.dart';
 import 'package:piano_exercises/features/catalog/domain/score_file_store.dart';
 import 'package:piano_exercises/features/catalog/domain/score_import_source.dart';
 import 'package:piano_exercises/features/catalog/domain/score_parser.dart';
@@ -99,3 +100,12 @@ final catalogMutationVersionProvider =
     NotifierProvider<CatalogMutationVersionNotifier, int>(
       CatalogMutationVersionNotifier.new,
     );
+
+/// Unfiltered catalog pieces list refreshed whenever catalog contents change.
+final unfilteredCatalogPiecesProvider = FutureProvider.autoDispose<List<Piece>>(
+  (ref) async {
+    ref.watch(catalogMutationVersionProvider);
+    return ref.watch(catalogRepositoryProvider).queryPieces();
+  },
+  retry: (_, _) => null,
+);

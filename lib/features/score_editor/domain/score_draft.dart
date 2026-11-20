@@ -144,6 +144,19 @@ final class ScoreDraft {
     for (final dm in measures) {
       activeTime = dm.timeSignature ?? activeTime;
       final measureBeats = activeTime.measureQuarterBeats;
+      var effectiveMeasureBeats = measureBeats;
+      if (dm.measureNumber == 0 && dm.notes.isNotEmpty) {
+        var maxNoteEnd = const RationalBeats.zero();
+        for (final note in dm.notes) {
+          if (note.endOffset > maxNoteEnd) {
+            maxNoteEnd = note.endOffset;
+          }
+        }
+        if (maxNoteEnd > const RationalBeats.zero() &&
+            maxNoteEnd < measureBeats) {
+          effectiveMeasureBeats = maxNoteEnd;
+        }
+      }
       final rawNotes = <NoteTimelineInput>[
         for (final note in dm.notes)
           NoteTimelineInput(
@@ -164,14 +177,14 @@ final class ScoreDraft {
         notes: rawNotes,
       );
       final trebleRests = fillRestGaps(
-        measureBeats: measureBeats,
+        measureBeats: effectiveMeasureBeats,
         occupiedSpans: dm.notes
             .where((n) => n.staffNote.clef == Clef.treble)
             .map((n) => (start: n.beatOffset, end: n.endOffset)),
         clef: Clef.treble,
       );
       final bassRests = fillRestGaps(
-        measureBeats: measureBeats,
+        measureBeats: effectiveMeasureBeats,
         occupiedSpans: dm.notes
             .where((n) => n.staffNote.clef == Clef.bass)
             .map((n) => (start: n.beatOffset, end: n.endOffset)),

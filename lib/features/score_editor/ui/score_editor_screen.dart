@@ -71,6 +71,7 @@ class _ScoreEditorScreenState extends ConsumerState<ScoreEditorScreen> {
       scoreEditorControllerProvider(widget.sessionId).notifier,
     );
     final isCompactHeight = MediaQuery.sizeOf(context).height < 480;
+    final actionsDisabled = state.isLoadingVariant || state.loadError != null;
     final baseTitle =
         state.binding?.piece.title ??
         (state.draft.title == 'Untitled' ? 'Compose Score' : state.draft.title);
@@ -88,7 +89,7 @@ class _ScoreEditorScreenState extends ConsumerState<ScoreEditorScreen> {
             constraints: const BoxConstraints.tightFor(width: 36, height: 36),
             padding: EdgeInsets.zero,
             icon: const Icon(Icons.play_arrow_outlined),
-            onPressed: state.isLoadingVariant
+            onPressed: actionsDisabled
                 ? null
                 : () => unawaited(_openPreviewPractice(state)),
           ),
@@ -99,7 +100,7 @@ class _ScoreEditorScreenState extends ConsumerState<ScoreEditorScreen> {
             constraints: const BoxConstraints.tightFor(width: 36, height: 36),
             padding: EdgeInsets.zero,
             icon: const Icon(Icons.save_outlined),
-            onPressed: state.isLoadingVariant
+            onPressed: actionsDisabled
                 ? null
                 : () => unawaited(_openSaveSheet(state, controller)),
           ),

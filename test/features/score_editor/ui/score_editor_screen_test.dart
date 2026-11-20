@@ -410,5 +410,275 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      'PieceScoreScreen -> Edit -> Practice preview evaluates MIDI while parent PieceScoreScreen stays paused',
+      (tester) async {
+        final twoNoteScore = ScoreTimelineReducer.reduce(
+          title: 'Two Note Study',
+          initialScale: Scale.fromKeySignature(KeySignature.cMajor),
+          initialTimeSignature: TimeSignature.common,
+          measures: <MeasureTimelineInput>[
+            MeasureTimelineInput(
+              measureNumber: 1,
+              notes: <NoteTimelineInput>[
+                NoteTimelineInput(
+                  clef: Clef.treble,
+                  diatonicNote: DiatonicNote.c,
+                  octave: 4,
+                  explicitAlter: 0,
+                  beatOffset: const RationalBeats.zero(),
+                  duration: DurationValue(base: NoteBaseDuration.quarter),
+                ),
+                NoteTimelineInput(
+                  clef: Clef.treble,
+                  diatonicNote: DiatonicNote.d,
+                  octave: 4,
+                  explicitAlter: 0,
+                  beatOffset: RationalBeats(1),
+                  duration: DurationValue(base: NoteBaseDuration.quarter),
+                ),
+              ],
+            ),
+          ],
+        );
+        final bytes = const MusicXmlScoreSerializer().serialize(twoNoteScore);
+        final relPath = await fileStore.saveScoreBytes(
+          variantId: 'v_nested',
+          format: ScoreFormat.musicXml,
+          bytes: bytes,
+        );
+        final variant = ScoreVariant(
+          id: 'v_nested',
+          pieceId: 'p_nested',
+          difficultyTier: DifficultyTier.beginner,
+          label: 'Standard',
+          fileName: 'nested.musicxml',
+          storedRelativePath: relPath,
+          importedAtMs: 1,
+        );
+        final piece = Piece(
+          id: 'p_nested',
+          title: 'Two Note Study',
+          artist: '',
+          scale: twoNoteScore.scale,
+          variants: <ScoreVariant>[variant],
+        );
+        await catalogRepo.createPiece(piece);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              midiRepositoryProvider.overrideWithValue(midiRepo),
+              catalogRepositoryProvider.overrideWithValue(catalogRepo),
+              scoreFileStoreProvider.overrideWithValue(fileStore),
+              scoreParserProvider.overrideWithValue(
+                const MusicXmlScoreParser(),
+              ),
+              scoreSerializerProvider.overrideWithValue(
+                const MusicXmlScoreSerializer(),
+              ),
+              practiceChordWindowProvider.overrideWithValue(
+                const Duration(milliseconds: 10),
+              ),
+              scoreEditorChordWindowProvider.overrideWithValue(
+                const Duration(milliseconds: 10),
+              ),
+            ],
+            child: MaterialApp(
+              home: Builder(
+                builder: (context) => PieceScoreScreen(
+                  piece: piece,
+                  initialVariant: variant,
+                  onEditVariant: (p, v) => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ScoreEditorScreen(
+                        sessionId: ScoreEditorSessionId('edit_${v.id}'),
+                        initialPiece: p,
+                        initialVariant: v,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Open ScoreEditorScreen from PieceScoreScreen (#1), then Practice preview (#2).
+        await _tapByKey(tester, 'piece-score-edit-button');
+        await tester.pumpAndSettle();
+        await _tapByKey(tester, 'editor-practice-button');
+        await tester.pumpAndSettle();
+
+        // Preview (#2) evaluates C4 + D4 -> completes; parent (#1) ignores those notes.
+        midiRepo.emitNoteOn(60);
+        await tester.pump(const Duration(milliseconds: 20));
+        midiRepo.emitNoteOff(60);
+        await tester.pump();
+        midiRepo.emitNoteOn(62);
+        await tester.pump(const Duration(milliseconds: 20));
+        midiRepo.emitNoteOff(62);
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey<String>('practice_completed_banner')),
+          findsOneWidget,
+        );
+
+        // Pop preview and editor back to parent PieceScoreScreen (#1).
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey<String>('practice_completed_banner')),
+          findsNothing,
+        );
+
+        // Parent (#1) resumes cleanly upon return.
+        midiRepo.emitNoteOn(60);
+        await tester.pump(const Duration(milliseconds: 20));
+        midiRepo.emitNoteOff(60);
+        await tester.pump();
+        midiRepo.emitNoteOn(62);
+        await tester.pump(const Duration(milliseconds: 20));
+        midiRepo.emitNoteOff(62);
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey<String>('practice_completed_banner')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'disables Save and Practice buttons and ignores MIDI when loadError is active',
+      (tester) async {
+        final missingVariant = ScoreVariant(
+          id: 'v_broken',
+          pieceId: 'p_broken',
+          difficultyTier: DifficultyTier.beginner,
+          label: 'Broken',
+          fileName: 'broken.musicxml',
+          storedRelativePath: 'scores/v_broken.musicxml',
+          importedAtMs: 1,
+        );
+        final piece = Piece(
+          id: 'p_broken',
+          title: 'Broken Piece',
+          artist: '',
+          scale: Scale.fromKeySignature(KeySignature.cMajor),
+          variants: <ScoreVariant>[missingVariant],
+        );
+        const session = ScoreEditorSessionId('edit_v_broken');
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              midiRepositoryProvider.overrideWithValue(midiRepo),
+              catalogRepositoryProvider.overrideWithValue(catalogRepo),
+              scoreFileStoreProvider.overrideWithValue(fileStore),
+              scoreParserProvider.overrideWithValue(
+                const MusicXmlScoreParser(),
+              ),
+              scoreSerializerProvider.overrideWithValue(
+                const MusicXmlScoreSerializer(),
+              ),
+              scoreEditorChordWindowProvider.overrideWithValue(
+                const Duration(milliseconds: 10),
+              ),
+            ],
+            child: MaterialApp(
+              home: ScoreEditorScreen(
+                sessionId: session,
+                initialPiece: piece,
+                initialVariant: missingVariant,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final practiceBtn = tester.widget<IconButton>(
+          find.byKey(const ValueKey<String>('editor-practice-button')),
+        );
+        final saveBtn = tester.widget<IconButton>(
+          find.byKey(const ValueKey<String>('editor-open-save-button')),
+        );
+        expect(practiceBtn.onPressed, isNull);
+        expect(saveBtn.onPressed, isNull);
+
+        midiRepo.emitNoteOn(60);
+        await tester.pump(const Duration(milliseconds: 20));
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(ScoreEditorScreen)),
+        );
+        final state = container.read(scoreEditorControllerProvider(session));
+        expect(state.loadError, isNotNull);
+        expect(state.isDirty, isFalse);
+      },
+    );
+
+    testWidgets(
+      'ScoreSaveSheet shows Attach to piece with unfiltered catalog pieces despite active search filter',
+      (tester) async {
+        final piece = Piece(
+          id: 'p_existing',
+          title: 'Sonata in C',
+          artist: 'W. A. Mozart',
+          scale: Scale.fromKeySignature(KeySignature.cMajor),
+          variants: <ScoreVariant>[
+            ScoreVariant(
+              id: 'v_1',
+              pieceId: 'p_existing',
+              difficultyTier: DifficultyTier.beginner,
+              label: 'Beginner',
+              fileName: 'sonata.musicxml',
+              storedRelativePath: 'scores/v_1.musicxml',
+              importedAtMs: 1,
+            ),
+          ],
+        );
+        await catalogRepo.createPiece(piece);
+
+        await _pumpEditor(
+          tester,
+          midiRepo: midiRepo,
+          catalogRepo: catalogRepo,
+          fileStore: fileStore,
+        );
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(ScoreEditorScreen)),
+        );
+        final catalogSub = container.listen(
+          catalogControllerProvider,
+          (_, _) {},
+        );
+        addTearDown(catalogSub.close);
+        container
+            .read(catalogQueryProvider.notifier)
+            .setSearchText('no_such_piece_filter');
+        await tester.pumpAndSettle();
+        expect(
+          container.read(catalogControllerProvider).value?.pieces,
+          isEmpty,
+        );
+
+        await _tapByKey(tester, 'editor-open-save-button');
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey<String>('save-mode-attach-piece')),
+          findsOneWidget,
+        );
+        await _tapByKey(tester, 'save-mode-attach-piece');
+        await tester.pumpAndSettle();
+        expect(find.text('Sonata in C — W. A. Mozart'), findsOneWidget);
+        await _tapByKey(tester, 'save-submit-button');
+        await tester.pumpAndSettle();
+        final updated = await catalogRepo.getPieceById('p_existing');
+        expect(updated?.variants, hasLength(2));
+      },
+    );
   });
 }

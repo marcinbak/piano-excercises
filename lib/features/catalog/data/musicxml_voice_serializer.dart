@@ -142,7 +142,11 @@ int _writeGap(
       }
       return writtenTicks + gapTicks;
     }
-    final part = largestMusicXmlRestDuration(cursor, remaining);
+    final part = largestMusicXmlRestDuration(
+      cursor,
+      remaining,
+      divisions: input.divisions,
+    );
     final ticks = musicXmlBeatsToTicks(part.quarterBeats, input.divisions);
     writeMusicXmlRestNote(
       builder,
@@ -222,7 +226,10 @@ int computeMusicXmlMeasureDivisions(
   ScoreMeasure measure,
   TimeSignature activeTime,
 ) {
-  var lcm = activeTime.measureQuarterBeats.denominator;
+  var lcm = musicXmlLcm(
+    resolveMusicXmlMeasureBeats(measure, activeTime).denominator,
+    activeTime.measureQuarterBeats.denominator,
+  );
   for (final slice in measure.slices) {
     lcm = musicXmlLcm(lcm, slice.beatOffset.denominator);
     for (final note in slice.trebleNotes) {

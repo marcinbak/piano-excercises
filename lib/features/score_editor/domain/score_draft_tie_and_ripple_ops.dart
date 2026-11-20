@@ -119,23 +119,47 @@ List<DraftMeasure> rippleInsertGap(
       } else if (note.endOffset > measureBeats) {
         final inParts = splitDuration(measureBeats - note.beatOffset);
         final outParts = splitDuration(note.endOffset - measureBeats);
+        final hadIncoming =
+            note.tie == TieType.stop || note.tie == TieType.continueTie;
+        final hadOutgoing =
+            note.tie == TieType.start || note.tie == TieType.continueTie;
+        final total = inParts.length + outParts.length;
         var pos = note.beatOffset;
+        var combinedIdx = 0;
         for (final dur in inParts) {
           keptInMeasure.add(
-            note.copyWith(beatOffset: pos, duration: dur, tie: TieType.start),
+            note.copyWith(
+              beatOffset: pos,
+              duration: dur,
+              tie: _splitPartTie(
+                combinedIdx,
+                total,
+                hadIncoming: hadIncoming,
+                hadOutgoing: hadOutgoing,
+              ),
+              clearExplicitAccidental: combinedIdx > 0,
+            ),
           );
           pos = pos + dur.quarterBeats;
+          combinedIdx += 1;
         }
         var outPos = const RationalBeats.zero();
         for (final dur in outParts) {
-          final overflow = note.copyWith(
-            beatOffset: outPos,
-            duration: dur,
-            tie: TieType.stop,
-            clearExplicitAccidental: true,
+          nextIncoming.add(
+            note.copyWith(
+              beatOffset: outPos,
+              duration: dur,
+              tie: _splitPartTie(
+                combinedIdx,
+                total,
+                hadIncoming: hadIncoming,
+                hadOutgoing: hadOutgoing,
+              ),
+              clearExplicitAccidental: true,
+            ),
           );
-          nextIncoming.add(overflow);
           outPos = outPos + dur.quarterBeats;
+          combinedIdx += 1;
         }
         if (outPos > maxOverflowEnd) {
           maxOverflowEnd = outPos;
@@ -152,6 +176,21 @@ List<DraftMeasure> rippleInsertGap(
   return measures;
 }
 
+TieType _splitPartTie(
+  int index,
+  int total, {
+  required bool hadIncoming,
+  required bool hadOutgoing,
+}) {
+  if (index == 0) {
+    return hadIncoming ? TieType.continueTie : TieType.start;
+  }
+  if (index == total - 1) {
+    return hadOutgoing ? TieType.continueTie : TieType.stop;
+  }
+  return TieType.continueTie;
+}
+
 void _clearIncomingPartnerTie(
   ScoreDraft draft,
   List<DraftMeasure> measures,
@@ -160,7 +199,7 @@ void _clearIncomingPartnerTie(
 ) {
   final measureBeats = activeDraftTimeAt(
     draft.timeSignature,
-    measures,
+    draft.measures,
     measureIdx,
   ).measureQuarterBeats;
   final int targetIdx;
@@ -213,7 +252,7 @@ void _clearOutgoingPartnerTie(
     }
     targetEnd = activeDraftTimeAt(
       draft.timeSignature,
-      measures,
+      draft.measures,
       targetIdx,
     ).measureQuarterBeats;
   } else {

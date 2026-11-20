@@ -66,7 +66,8 @@ export 'state/catalog_providers.dart'
         scoreFileStoreProvider,
         scoreImportSourceProvider,
         scoreParserProvider,
-        scoreSerializerProvider;
+        scoreSerializerProvider,
+        unfilteredCatalogPiecesProvider;
 export 'ui/batch_score_import_sheet.dart' show BatchScoreImportSheet;
 export 'ui/catalog_screen.dart' show CatalogScreen;
 export 'ui/score_import_fields.dart'

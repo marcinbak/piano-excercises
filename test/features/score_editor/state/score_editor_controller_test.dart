@@ -262,6 +262,19 @@ void main() {
       state = container.read(scoreEditorControllerProvider(session));
       expect(state.isLoadingVariant, isFalse);
       expect(state.loadError, isNotNull);
+
+      // While loadError != null, MIDI Note On and mutations are ignored.
+      final failedDraft = state.draft;
+      midiRepo.noteEventsController.add(_noteOn(60));
+      await Future<void>.delayed(const Duration(milliseconds: 25));
+      controller.addTouchNote();
+      controller.updateSetup(timeSignature: TimeSignature(3, 4));
+      controller.undo();
+      controller.redo();
+      state = container.read(scoreEditorControllerProvider(session));
+      expect(state.loadError, isNotNull);
+      expect(state.isDirty, isFalse);
+      expect(state.draft, failedDraft);
     });
   });
 }

@@ -45,7 +45,7 @@ final practiceHandModeProvider =
       PracticeHandModeNotifier.new,
     );
 
-/// Pause toggle for piece practice MIDI evaluation across modals and pushed routes.
+/// Global pause toggle for piece practice MIDI evaluation.
 class PracticePausedNotifier extends Notifier<bool> {
   @override
   bool build() => false;
@@ -56,4 +56,21 @@ class PracticePausedNotifier extends Notifier<bool> {
 final practicePausedProvider =
     NotifierProvider.autoDispose<PracticePausedNotifier, bool>(
       PracticePausedNotifier.new,
+    );
+
+/// Per-route pause toggle isolating modals/pushed routes on one [PieceScoreScreen].
+class PracticeRoutePausedNotifier extends Notifier<bool> {
+  PracticeRoutePausedNotifier(this.routeId);
+
+  final int routeId;
+
+  @override
+  bool build() => false;
+
+  void setPaused(bool paused) => state = paused;
+}
+
+final practiceRoutePausedProvider = NotifierProvider.autoDispose
+    .family<PracticeRoutePausedNotifier, bool, int>(
+      PracticeRoutePausedNotifier.new,
     );

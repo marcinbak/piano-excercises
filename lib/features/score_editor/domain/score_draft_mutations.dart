@@ -39,6 +39,7 @@ extension ScoreDraftMutations on ScoreDraft {
     }
     writeSegmentedChord(
       plan.measures,
+      draft: this,
       segments: plan.segments,
       entries: entries,
       affectedClefs: affectedClefs,
@@ -114,22 +115,18 @@ extension ScoreDraftMutations on ScoreDraft {
       return this;
     }
     for (final seg in plan.segments) {
-      final before = plan.measures[seg.measureIndex].notes;
       final cleared = clearNoteSpanInMeasure(
         plan.measures[seg.measureIndex],
         clefs: const <Clef>{Clef.treble, Clef.bass},
         start: seg.beatOffset,
         end: seg.endOffset,
       );
-      final removed = before
-          .where((n) => !cleared.notes.contains(n))
-          .toList(growable: false);
-      plan.measures[seg.measureIndex] = cleared;
+      plan.measures[seg.measureIndex] = cleared.measure;
       healNeighborTies(
         this,
         plan.measures,
         measureIdx: seg.measureIndex,
-        removed: removed,
+        removed: cleared.brokenNotes,
       );
     }
     return copyWith(measures: plan.measures, cursor: plan.nextCursor);
@@ -239,6 +236,7 @@ extension ScoreDraftMutations on ScoreDraft {
     ];
     writeSegmentedChord(
       plan.measures,
+      draft: tempDraft,
       segments: plan.segments,
       entries: entries,
       affectedClefs: affectedClefs,

@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:piano_exercises/features/catalog/catalog.dart';
 import 'package:piano_exercises/features/score_editor/domain/score_draft.dart';
 import 'package:piano_exercises/features/score_editor/domain/score_draft_mutations.dart';
+import 'package:piano_exercises/features/score_editor/domain/score_draft_tie_and_ripple_ops.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
 void main() {
@@ -274,6 +276,317 @@ void main() {
             .pitchName,
         'C4',
       );
+    });
+  });
+
+  group('ScoreDraft tie healing and pickup bar regressions', () {
+    test('writeSegmentedChord heals neighbor ties on full and partial overwrite', () {
+      // Build C4 [2,4) (start) -> M1 [0,1) C4 (stop) via dotted half at beat 2.
+      final draft =
+          ScoreDraft(
+            cursor: EditorCursor(measureIndex: 0, beatOffset: RationalBeats(2)),
+          ).setBaseDuration(NoteBaseDuration.half).toggleDot().enterMidiChord(
+            <MidiNote>{const MidiNote(60)},
+          );
+      expect(draft.measures[0].notes.single.tie, TieType.start);
+      expect(draft.measures[1].notes.single.tie, TieType.stop);
+
+      // Full overwrite of M0 [2,4) directly via enterMidiChord heals M1 [0,1) incoming tie.
+      final fullOverwrite = draft
+          .copyWith(
+            cursor: EditorCursor(measureIndex: 0, beatOffset: RationalBeats(2)),
+            selectedDuration: DurationValue(base: NoteBaseDuration.half),
+          )
+          .enterMidiChord(<MidiNote>{const MidiNote(62)});
+      expect(fullOverwrite.measures[1].notes.single.tie, TieType.none);
+
+      // Chain C4 [1,2) (start) -> C4 [2,4) (continueTie) -> M1 [0,1) C4 (stop).
+      final chained = draft
+          .copyWith(
+            cursor: EditorCursor(measureIndex: 0, beatOffset: RationalBeats(1)),
+            selectedDuration: DurationValue(base: NoteBaseDuration.quarter),
+          )
+          .enterMidiChord(<MidiNote>{const MidiNote(60)})
+          .copyWith(
+            cursor: EditorCursor(measureIndex: 0, beatOffset: RationalBeats(1)),
+          )
+          .toggleTieAtCursor();
+      expect(chained.measures[0].notes[0].tie, TieType.start);
+      expect(chained.measures[0].notes[1].tie, TieType.continueTie);
+      expect(chained.measures[1].notes.single.tie, TieType.stop);
+
+      // Partial overwrite at beat 3 trims [2,4) -> [2,3), preserving its incoming tie (stop)
+      // while healing M1 [0,1) outgoing tie to none.
+      final partial = chained
+          .copyWith(
+            cursor: EditorCursor(measureIndex: 0, beatOffset: RationalBeats(3)),
+            selectedDuration: DurationValue(base: NoteBaseDuration.quarter),
+          )
+          .enterMidiChord(<MidiNote>{const MidiNote(62)});
+      final m0C4Beat1 = partial.measures[0].notes.firstWhere(
+        (n) => n.beatOffset == RationalBeats(1),
+      );
+      final m0C4Beat2 = partial.measures[0].notes.firstWhere(
+        (n) => n.beatOffset == RationalBeats(2),
+      );
+      expect(m0C4Beat1.tie, TieType.start);
+      expect(m0C4Beat2.duration.quarterBeats, RationalBeats(1));
+      expect(m0C4Beat2.tie, TieType.stop);
+      expect(partial.measures[1].notes.single.tie, TieType.none);
+    });
+
+    test('setNoteAccidental and flipNoteClef heal neighbor ties when pitch or clef changes', () {
+      final base =
+          ScoreDraft(
+            cursor: EditorCursor(measureIndex: 0, beatOffset: RationalBeats(2)),
+          ).setBaseDuration(NoteBaseDuration.half).toggleDot().enterMidiChord(
+            <MidiNote>{const MidiNote(60)},
+          );
+
+      // Cautionary natural on already-natural C4 keeps tie intact.
+      final samePitch = base
+          .copyWith(cursor: const EditorCursor(measureIndex: 1))
+          .setNoteAccidental(0, Accidental.natural);
+      expect(samePitch.measures[0].notes.single.tie, TieType.start);
+      expect(samePitch.measures[1].notes.single.tie, TieType.stop);
+
+      // Accidental change to C#4 breaks and heals tie on predecessor.
+      final sharpChanged = base
+          .copyWith(cursor: const EditorCursor(measureIndex: 1))
+          .setNoteAccidental(0, Accidental.sharp);
+      expect(sharpChanged.measures[0].notes.single.tie, TieType.none);
+      expect(sharpChanged.measures[1].notes.single.tie, TieType.none);
+      expect(sharpChanged.measures[1].notes.single.staffNote.pitchName, 'C#4');
+
+      // Flipping clef breaks and heals tie on predecessor.
+      final clefFlipped = base
+          .copyWith(cursor: const EditorCursor(measureIndex: 1))
+          .flipNoteClef(0);
+      expect(clefFlipped.measures[0].notes.single.tie, TieType.none);
+      expect(clefFlipped.measures[1].notes.single.tie, TieType.none);
+      expect(clefFlipped.measures[1].notes.single.staffNote.clef, Clef.bass);
+    });
+
+    test('updateSetup meter shrink heals dropped/trimmed ties and chains multi-part splits', () {
+      // Case 1: M0 [3,4) (start) -> M1 [0,1) (stop) dropped on 4/4 -> 3/4.
+      final beat3Tie =
+          ScoreDraft(
+                cursor: EditorCursor(
+                  measureIndex: 0,
+                  beatOffset: RationalBeats(3),
+                ),
+              )
+              .setBaseDuration(NoteBaseDuration.half)
+              .enterMidiChord(<MidiNote>{const MidiNote(60)})
+              .updateSetup(timeSignature: TimeSignature(3, 4));
+      expect(beat3Tie.measures[0].notes, isEmpty);
+      expect(beat3Tie.measures[1].notes.single.tie, TieType.none);
+
+      // Case 2: M0 [0, 0.5) (start) -> M0 [0.5, 4) (continueTie) -> M1 [0, 1) (stop)
+      // shrinking 4/4 -> 3/4 trims [0.5, 4) to 2.5 beats ([half, eighth]) preserving
+      // incoming tie from beat 0, chaining start->stop/continueTie->stop, and healing M1.
+      const c4 = StaffNote(note: DiatonicNote.c, octave: 4, clef: Clef.treble);
+      final chainedShrink = ScoreDraft(
+        measures: <DraftMeasure>[
+          DraftMeasure(
+            measureNumber: 1,
+            notes: <DraftNoteEvent>[
+              DraftNoteEvent(
+                staffNote: c4,
+                beatOffset: const RationalBeats.zero(),
+                duration: DurationValue(base: NoteBaseDuration.eighth),
+                tie: TieType.start,
+              ),
+              DraftNoteEvent(
+                staffNote: c4,
+                beatOffset: RationalBeats(1, 2),
+                duration: DurationValue(
+                  base: NoteBaseDuration.half,
+                  dots: 1,
+                  quarterBeats: RationalBeats(7, 2),
+                ),
+                tie: TieType.continueTie,
+              ),
+            ],
+          ),
+          DraftMeasure(
+            measureNumber: 2,
+            notes: <DraftNoteEvent>[
+              DraftNoteEvent(
+                staffNote: c4,
+                beatOffset: const RationalBeats.zero(),
+                duration: DurationValue(base: NoteBaseDuration.quarter),
+                tie: TieType.stop,
+              ),
+            ],
+          ),
+        ],
+      ).updateSetup(timeSignature: TimeSignature(3, 4));
+
+      expect(chainedShrink.measures[0].notes, hasLength(3));
+      expect(chainedShrink.measures[0].notes[0].tie, TieType.start);
+      expect(chainedShrink.measures[0].notes[1].tie, TieType.continueTie);
+      expect(
+        chainedShrink.measures[0].notes[1].duration.quarterBeats,
+        RationalBeats(2),
+      );
+      expect(chainedShrink.measures[0].notes[2].tie, TieType.stop);
+      expect(
+        chainedShrink.measures[0].notes[2].duration.quarterBeats,
+        RationalBeats(1, 2),
+      );
+      expect(chainedShrink.measures[1].notes.single.tie, TieType.none);
+    });
+
+    test('rippleInsertGap builds valid multi-part continueTie chains across barlines', () {
+      // Whole note C4 at [0,4) shifted by 1.5 beats (dotted quarter):
+      // inParts = [half (2), eighth (0.5)] at [1.5, 3.5) and [3.5, 4),
+      // outParts = [dotted quarter (1.5)] at M1 [0, 1.5).
+      final shifted = ScoreDraft()
+          .setBaseDuration(NoteBaseDuration.whole)
+          .enterMidiChord(<MidiNote>{const MidiNote(60)})
+          .copyWith(
+            cursor: const EditorCursor(measureIndex: 0),
+            selectedDuration: DurationValue(
+              base: NoteBaseDuration.quarter,
+              dots: 1,
+            ),
+          )
+          .insertEmptySlice();
+
+      expect(shifted.measures[0].notes, hasLength(2));
+      expect(shifted.measures[0].notes[0].tie, TieType.start);
+      expect(
+        shifted.measures[0].notes[0].duration.quarterBeats,
+        RationalBeats(2),
+      );
+      expect(shifted.measures[0].notes[1].tie, TieType.continueTie);
+      expect(
+        shifted.measures[0].notes[1].duration.quarterBeats,
+        RationalBeats(1, 2),
+      );
+      expect(shifted.measures[1].notes.single.tie, TieType.stop);
+      expect(
+        shifted.measures[1].notes.single.duration.quarterBeats,
+        RationalBeats(3, 2),
+      );
+
+      // Verify 2 inParts + 2 outParts preserves both plain and double-tied boundaries.
+      const c4 = StaffNote(note: DiatonicNote.c, octave: 4, clef: Clef.treble);
+      final plainMeasures = rippleInsertGap(
+        ScoreDraft(
+          measures: <DraftMeasure>[
+            DraftMeasure(
+              measureNumber: 1,
+              notes: <DraftNoteEvent>[
+                DraftNoteEvent(
+                  staffNote: c4,
+                  beatOffset: const RationalBeats.zero(),
+                  duration: DurationValue(base: NoteBaseDuration.whole),
+                ),
+              ],
+            ),
+          ],
+        ),
+        cursor: const EditorCursor(measureIndex: 0),
+        delta: RationalBeats(5, 4),
+      );
+      expect(plainMeasures[0].notes.map((n) => n.tie).toList(), <TieType>[
+        TieType.start,
+        TieType.continueTie,
+      ]);
+      expect(plainMeasures[1].notes.map((n) => n.tie).toList(), <TieType>[
+        TieType.continueTie,
+        TieType.stop,
+      ]);
+
+      final doubleTiedMeasures = rippleInsertGap(
+        ScoreDraft(
+          measures: <DraftMeasure>[
+            DraftMeasure(
+              measureNumber: 1,
+              notes: <DraftNoteEvent>[
+                DraftNoteEvent(
+                  staffNote: c4,
+                  beatOffset: const RationalBeats.zero(),
+                  duration: DurationValue(base: NoteBaseDuration.whole),
+                  tie: TieType.continueTie,
+                ),
+              ],
+            ),
+          ],
+        ),
+        cursor: const EditorCursor(measureIndex: 0),
+        delta: RationalBeats(5, 4),
+      );
+      expect(doubleTiedMeasures[0].notes.map((n) => n.tie).toList(), <TieType>[
+        TieType.continueTie,
+        TieType.continueTie,
+      ]);
+      expect(doubleTiedMeasures[1].notes.map((n) => n.tie).toList(), <TieType>[
+        TieType.continueTie,
+        TieType.continueTie,
+      ]);
+    });
+
+    test('ScoreDraft.toScore preserves measureNumber == 0 pickup duration without full-bar rest padding', () {
+      final quarter = DurationValue(base: NoteBaseDuration.quarter);
+      final pickupScore = ScoreTimelineReducer.reduce(
+        title: 'Anacrusis',
+        initialScale: Scale.fromKeySignature(KeySignature.cMajor),
+        initialTimeSignature: TimeSignature.common,
+        measures: <MeasureTimelineInput>[
+          MeasureTimelineInput(
+            measureNumber: 0,
+            notes: <NoteTimelineInput>[
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.g,
+                octave: 4,
+                explicitAlter: 0,
+                beatOffset: const RationalBeats.zero(),
+                duration: quarter,
+              ),
+            ],
+            rests: <RestTimelineInput>[
+              RestTimelineInput(
+                clef: Clef.bass,
+                beatOffset: const RationalBeats.zero(),
+                duration: quarter,
+              ),
+            ],
+          ),
+          MeasureTimelineInput(
+            measureNumber: 1,
+            notes: <NoteTimelineInput>[
+              NoteTimelineInput(
+                clef: Clef.treble,
+                diatonicNote: DiatonicNote.c,
+                octave: 5,
+                explicitAlter: 0,
+                beatOffset: const RationalBeats.zero(),
+                duration: DurationValue(base: NoteBaseDuration.whole),
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final redraftedScore = ScoreDraft.fromScore(pickupScore).toScore();
+      expect(redraftedScore.measures[0].measureNumber, 0);
+      expect(redraftedScore.measures[0].slices, hasLength(1));
+      expect(
+        redraftedScore.measures[0].slices.single.beatDuration,
+        RationalBeats(1),
+      );
+
+      final bytes = const MusicXmlScoreSerializer().serialize(redraftedScore);
+      final reparsed = const MusicXmlScoreParser()
+          .parseBytes(bytes, fileName: 'pickup.musicxml')
+          .score;
+      expect(reparsed.measures[0].measureNumber, 0);
+      expect(reparsed.measures[0].slices, hasLength(1));
+      expect(reparsed.measures[0].slices.single.beatDuration, RationalBeats(1));
     });
   });
 }
