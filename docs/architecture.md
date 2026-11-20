@@ -12,7 +12,8 @@ Rules for where code goes and what may depend on what. Enforced by `flutter anal
 | `lib/features/progression/` | Difficulty stages, unlocked note pools (Core Cs → all Cs → landmarks → all naturals), and local persistence | `lib/features/progression/progression.dart` |
 | `lib/features/midi/` | BLE-MIDI discovery, connection lifecycle, Note On/Off stream | `lib/features/midi/midi.dart` |
 | `lib/features/piece_practice/` | Interactive grand-staff score practice, polyphonic Wait-Mode evaluation, measure loops, hand dimming, and `Score`-to-`NotationScore` mapping | `lib/features/piece_practice/piece_practice.dart` |
-| `lib/shared/` | Music theory and score primitives, shared UI widgets, theme tokens used by ≥2 features | per-folder `<area>.dart` |
+| `lib/features/score_editor/` | Step-time MIDI and touch grand-staff score editor, draft timeline mutations, and catalog save flows | `lib/features/score_editor/score_editor.dart` |
+| `lib/shared/` | Music theory and score primitives, shared SMuFL score mapping (`lib/shared/notation/`), shared UI widgets, theme tokens used by ≥2 features | per-folder `<area>.dart` |
 | `packages/smufl_notation/` | Standalone OSS SMuFL grand-staff layout and `CustomPainter` package; zero app imports | `packages/smufl_notation/lib/smufl_notation.dart` |
 
 ## Layers and dependency direction
@@ -21,7 +22,7 @@ Rules for where code goes and what may depend on what. Enforced by `flutter anal
 
 - `domain/` is pure Dart: imports nothing from `package:flutter`, `package:material_ui`, `flutter_riverpod`, `ui/`, `state/`, or `data/`.
 - `shared/` never imports `features/` or `app/`.
-- Feature → feature imports use only the target feature's barrel file (`lib/features/<name>/<name>.dart`); no cycles.
+- Feature → feature imports use only the target feature's barrel file (`lib/features/<name>/<name>.dart`); no cycles (`app -> score_editor -> piece_practice -> {catalog, midi} -> shared`).
 - Cross-feature barrels exporting `state/`, `ui/`, or `data/` break `domain/` purity; pass `shared/` primitives into `domain/` instead.
 - Invert dependencies (an abstract interface in `domain/`, implemented in `data/`) only at real I/O boundaries (BLE-MIDI plugin, local storage, clock/randomness).
 - Inside `packages/smufl_notation/lib/src/`: `widgets/ -> painting/ -> layout/ -> model/ <- glyphs/` (`glyphs/` and `model/` are pure Dart; `layout/` avoids `package:flutter`).
