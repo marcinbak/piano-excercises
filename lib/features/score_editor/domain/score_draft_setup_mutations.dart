@@ -110,6 +110,14 @@ extension ScoreDraftSetupMutations on ScoreDraft {
     );
   }
 
+  /// Whether any bar contains pitched notes.
+  bool get hasAnyNotes => measures.any((m) => m.notes.isNotEmpty);
+
+  /// Whether resetting the score would change measures or clear notes.
+  bool get canClearScore =>
+      hasAnyNotes ||
+      clearScore() != copyWith(cursor: const EditorCursor(measureIndex: 0));
+
   /// Resets all measures to four empty bars under the current meter and key.
   ScoreDraft clearScore() {
     return copyWith(

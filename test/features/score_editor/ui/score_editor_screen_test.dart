@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +8,7 @@ import 'package:piano_exercises/features/catalog/catalog.dart';
 import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/features/piece_practice/piece_practice.dart';
 import 'package:piano_exercises/features/score_editor/score_editor.dart';
+import 'package:piano_exercises/features/score_playback/score_playback.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
 class _TestMidiRepository implements MidiRepository {
@@ -680,5 +682,233 @@ void main() {
         expect(updated?.variants, hasLength(2));
       },
     );
+
+    testWidgets(
+      'visible Reset button clears all notes, preserves key and meter, and supports Undo',
+      (tester) async {
+        await _pumpEditor(
+          tester,
+          midiRepo: midiRepo,
+          catalogRepo: catalogRepo,
+          fileStore: fileStore,
+        );
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(ScoreEditorScreen)),
+        );
+
+        // Disabled initially on blank 4-bar draft.
+        expect(
+          tester
+              .widget<ActionChip>(
+                find.byKey(const ValueKey<String>('editor-reset-button')),
+              )
+              .onPressed,
+          isNull,
+        );
+
+        // Set 3/4 G Major and enter notes.
+        container
+            .read(
+              scoreEditorControllerProvider(ScoreEditorSessionId.composeTab)
+                  .notifier,
+            )
+            .updateSetup(
+              scale: Scale.fromKeySignature(const KeySignature(1)),
+              timeSignature: TimeSignature(3, 4),
+            );
+        await _tapByKey(tester, 'editor-add-note');
+        await _tapByKey(tester, 'editor-add-measure-button');
+        await tester.pumpAndSettle();
+
+        var state = container.read(
+          scoreEditorControllerProvider(ScoreEditorSessionId.composeTab),
+        );
+        expect(state.draft.measures, hasLength(5));
+        expect(state.draft.measures[0].notes, isNotEmpty);
+
+        // Tap Reset -> clears notes and restores 4 empty bars while preserving G Major 3/4.
+        await _tapByKey(tester, 'editor-reset-button');
+        await tester.pumpAndSettle();
+        state = container.read(
+          scoreEditorControllerProvider(ScoreEditorSessionId.composeTab),
+        );
+        expect(state.draft.measures, hasLength(4));
+        expect(state.draft.measures.every((m) => m.notes.isEmpty), isTrue);
+        expect(state.draft.scale.keySignature.fifths, 1);
+        expect(state.draft.timeSignature, TimeSignature(3, 4));
+
+        // Undo restores all cleared notes and 5 measures.
+        await _tapByKey(tester, 'editor-undo-button');
+        await tester.pumpAndSettle();
+        state = container.read(
+          scoreEditorControllerProvider(ScoreEditorSessionId.composeTab),
+        );
+        expect(state.draft.measures, hasLength(5));
+        expect(state.draft.measures[0].notes, isNotEmpty);
+      },
+    );
+
+    testWidgets(
+      'plays composed draft on device speaker and connected MIDI piano while gating MIDI input',
+      (tester) async {
+        final midiSink = _TestEditorMidiSink();
+        final pcmOut = _TestEditorPcmOutput();
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              midiRepositoryProvider.overrideWithValue(midiRepo),
+              midiOutputSinkProvider.overrideWithValue(midiSink),
+              pcmAudioOutputProvider.overrideWithValue(pcmOut),
+              catalogRepositoryProvider.overrideWithValue(catalogRepo),
+              scoreFileStoreProvider.overrideWithValue(fileStore),
+              scoreParserProvider.overrideWithValue(
+                const MusicXmlScoreParser(),
+              ),
+              scoreSerializerProvider.overrideWithValue(
+                const MusicXmlScoreSerializer(),
+              ),
+              scoreEditorChordWindowProvider.overrideWithValue(
+                const Duration(milliseconds: 10),
+              ),
+            ],
+            child: const MaterialApp(home: ScoreEditorScreen()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Play button disabled when score has zero notes.
+        expect(
+          tester
+              .widget<IconButton>(
+                find.byKey(const ValueKey<String>('editor-play-stop-button')),
+              )
+              .onPressed,
+          isNull,
+        );
+
+        // Add two notes via touch.
+        await _tapByKey(tester, 'editor-add-note');
+        await _tapByKey(tester, 'editor-next-slice');
+        await _tapByKey(tester, 'editor-add-note');
+        await tester.pumpAndSettle();
+
+        final container = ProviderScope.containerOf(
+          tester.element(find.byType(ScoreEditorScreen)),
+        );
+        final notesBeforePlay = container
+            .read(
+              scoreEditorControllerProvider(ScoreEditorSessionId.composeTab),
+            )
+            .draft
+            .measures[0]
+            .notes
+            .length;
+        expect(notesBeforePlay, 2);
+
+        // Disconnected -> plays through device speaker PCM output.
+        await _tapByKey(tester, 'editor-play-stop-button');
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(pcmOut.enqueuedCount, greaterThan(0));
+
+        // Echoed MIDI note while playing must NOT insert notes into the draft.
+        midiRepo.emitNoteOn(72);
+        await tester.pump(const Duration(milliseconds: 30));
+        midiRepo.emitNoteOff(72);
+        await tester.pump();
+        expect(
+          container
+              .read(
+                scoreEditorControllerProvider(ScoreEditorSessionId.composeTab),
+              )
+              .draft
+              .measures[0]
+              .notes,
+          hasLength(2),
+        );
+
+        // Stop playback.
+        await _tapByKey(tester, 'editor-play-stop-button');
+        await tester.pump();
+        expect(pcmOut.stopCount, greaterThan(0));
+
+        // Connect MIDI piano -> Auto routes playback to MIDI Note On/Off.
+        midiRepo.devicesController.add(const <MidiDeviceInfo>[
+          MidiDeviceInfo(
+            id: 'ble-1',
+            name: 'Yamaha P-125',
+            typeLabel: 'BLE',
+            isConnected: true,
+          ),
+        ]);
+        await tester.pump();
+
+        await _tapByKey(tester, 'editor-play-stop-button');
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(midiSink.sentNoteOns, contains(60));
+
+        // Reset stops playback, flushes AllNotesOff, and clears notes.
+        await _tapByKey(tester, 'editor-reset-button');
+        await tester.pump();
+        expect(midiSink.allNotesOffCalls, greaterThan(0));
+        expect(
+          container
+              .read(
+                scoreEditorControllerProvider(ScoreEditorSessionId.composeTab),
+              )
+              .draft
+              .hasAnyNotes,
+          isFalse,
+        );
+      },
+    );
   });
+}
+
+class _TestEditorMidiSink implements MidiOutputSink {
+  final List<int> sentNoteOns = <int>[];
+  int allNotesOffCalls = 0;
+
+  @override
+  Future<void> sendNoteOn(
+    MidiNote note, {
+    int velocity = 96,
+    int channel = 0,
+    String? deviceId,
+  }) async {
+    sentNoteOns.add(note.number);
+  }
+
+  @override
+  Future<void> sendNoteOff(
+    MidiNote note, {
+    int channel = 0,
+    String? deviceId,
+  }) async {}
+
+  @override
+  Future<void> sendAllNotesOff({int channel = 0, String? deviceId}) async {
+    allNotesOffCalls += 1;
+  }
+}
+
+class _TestEditorPcmOutput implements PcmAudioOutput {
+  @override
+  int get sampleRate => 24000;
+
+  int enqueuedCount = 0;
+  int stopCount = 0;
+
+  @override
+  Future<void> enqueuePcm16Mono(Uint8List pcmBytes) async {
+    enqueuedCount += 1;
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCount += 1;
+  }
+
+  @override
+  Future<void> dispose() async {}
 }

@@ -35,12 +35,16 @@ final class PiecePracticeBodyConfig {
     required this.isCompactHeight,
     required this.onRetry,
     this.controller,
+    this.playbackSliceIndex,
+    this.onStopPlayback,
     this.staticWrongOverlays = const <WrongNoteOverlay>[],
   });
 
   final bool isCompactHeight;
   final VoidCallback onRetry;
   final PiecePracticeController? controller;
+  final int? playbackSliceIndex;
+  final VoidCallback? onStopPlayback;
   final List<WrongNoteOverlay> staticWrongOverlays;
 }
 
@@ -79,21 +83,25 @@ class PiecePracticeBody extends StatelessWidget {
     PiecePracticeController controller,
   ) {
     final activeOrdinal = activeSession.activeSliceOrdinal;
-    final activeSliceIndex =
+    final practiceSliceIndex =
         (activeOrdinal != null &&
             activeOrdinal >= 0 &&
             activeOrdinal < score.slices.length)
         ? score.slices[activeOrdinal].sliceIndex
         : null;
+    final isPlayingBack = config.playbackSliceIndex != null;
+    final activeSliceIndex = config.playbackSliceIndex ?? practiceSliceIndex;
     final wrongOverlays = <WrongNoteOverlay>[
       ...config.staticWrongOverlays,
-      if (activeSliceIndex != null && activeSession.wrongPlayedNotes.isNotEmpty)
+      if (!isPlayingBack &&
+          practiceSliceIndex != null &&
+          activeSession.wrongPlayedNotes.isNotEmpty)
         ...ScoreNotationMapper.mapWrongNoteOverlays(
-          sliceIndex: activeSliceIndex,
+          sliceIndex: practiceSliceIndex,
           wrongNotes: activeSession.wrongPlayedNotes,
           activeKeySignature: ScorePracticeNavigator.activeKeySignatureAtSlice(
             score,
-            activeSliceIndex,
+            practiceSliceIndex,
           ),
         ),
     ];
@@ -103,7 +111,10 @@ class PiecePracticeBody extends StatelessWidget {
       children: <Widget>[
         PiecePracticeStatusBanner(
           status: activeSession.status,
-          onRestart: controller.restart,
+          onRestart: () {
+            config.onStopPlayback?.call();
+            controller.restart();
+          },
           isCompact: config.isCompactHeight,
         ),
         Expanded(
@@ -112,13 +123,16 @@ class PiecePracticeBody extends StatelessWidget {
             child: PieceScoreViewport(
               score: score,
               activeSliceIndex: activeSliceIndex,
-              matchedSliceIndex: activeSession.isShowingCorrect
-                  ? activeSliceIndex
+              matchedSliceIndex:
+                  (!isPlayingBack && activeSession.isShowingCorrect)
+                  ? practiceSliceIndex
                   : null,
               handMode: handMode,
               wrongNoteOverlays: wrongOverlays,
-              onSliceTapped: (tappedSliceIndex) =>
-                  _onSliceTapped(score, controller, tappedSliceIndex),
+              onSliceTapped: (tappedSliceIndex) {
+                config.onStopPlayback?.call();
+                _onSliceTapped(score, controller, tappedSliceIndex);
+              },
             ),
           ),
         ),
@@ -154,6 +168,7 @@ PieceScoreCursorBarData buildPieceScoreCursorBarData({
   required PracticeSessionState sessionState,
   required PiecePracticeController controller,
   required VoidCallback? onOpenLoopSheet,
+  VoidCallback? onStopPlayback,
 }) {
   final activeOrdinal = sessionState.activeSliceOrdinal;
   final loopRange = sessionState.loopRange;
@@ -194,15 +209,33 @@ PieceScoreCursorBarData buildPieceScoreCursorBarData({
     measureNumber: currentMeasure,
     measureCount: score.measures.length,
     stepControls: PieceScoreStepControls(
-      onPrevSlice: canPrev ? controller.stepPrevious : null,
-      onNextSlice: canNext ? controller.stepNext : null,
-      onResetSlice: canReset ? controller.restart : null,
+      onPrevSlice: canPrev
+          ? () {
+              onStopPlayback?.call();
+              controller.stepPrevious();
+            }
+          : null,
+      onNextSlice: canNext
+          ? () {
+              onStopPlayback?.call();
+              controller.stepNext();
+            }
+          : null,
+      onResetSlice: canReset
+          ? () {
+              onStopPlayback?.call();
+              controller.restart();
+            }
+          : null,
     ),
     loopControls: PieceScoreLoopControls(
       loopLabel: loopRange?.formatLabel(score.measures),
       onOpenLoopSheet: onOpenLoopSheet,
       onClearLoop: loopRange != null
-          ? () => controller.setLoopRange(null)
+          ? () {
+              onStopPlayback?.call();
+              controller.setLoopRange(null);
+            }
           : null,
     ),
   );

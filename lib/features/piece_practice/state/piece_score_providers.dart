@@ -79,3 +79,20 @@ final practiceRoutePausedProvider = NotifierProvider.autoDispose
     .family<PracticeRoutePausedNotifier, bool, int>(
       PracticeRoutePausedNotifier.new,
     );
+
+/// Per-route pause toggle gating Wait-Mode evaluation while score playback runs.
+class PracticePlaybackPausedNotifier extends Notifier<bool> {
+  PracticePlaybackPausedNotifier(this.routeId);
+
+  final int routeId;
+
+  @override
+  bool build() => false;
+
+  void setPaused(bool paused) => state = paused;
+}
+
+final practicePlaybackPausedProvider = NotifierProvider.autoDispose
+    .family<PracticePlaybackPausedNotifier, bool, int>(
+      PracticePlaybackPausedNotifier.new,
+    );

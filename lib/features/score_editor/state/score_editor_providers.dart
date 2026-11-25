@@ -44,6 +44,23 @@ final scoreEditorSessionPausedProvider = NotifierProvider.autoDispose
       ScoreEditorSessionPausedNotifier.new,
     );
 
+/// Per-session pause toggle gating live MIDI note entry while playback runs.
+class ScoreEditorPlaybackPausedNotifier extends Notifier<bool> {
+  ScoreEditorPlaybackPausedNotifier(this.arg);
+
+  final ScoreEditorSessionId arg;
+
+  @override
+  bool build() => false;
+
+  void setPaused(bool paused) => state = paused;
+}
+
+final scoreEditorPlaybackPausedProvider = NotifierProvider.autoDispose
+    .family<ScoreEditorPlaybackPausedNotifier, bool, ScoreEditorSessionId>(
+      ScoreEditorPlaybackPausedNotifier.new,
+    );
+
 /// Locates the index of a newly added note inside [next] compared against [prev].
 int? findAddedEditorNoteIndex(
   List<DraftNoteEvent> prev,

@@ -83,12 +83,14 @@ class PieceScoreHeaderBar extends StatelessWidget {
     required this.variantControl,
     required this.handControl,
     this.cursor,
+    this.playbackControls,
   });
 
   final Piece piece;
   final PieceScoreVariantControl variantControl;
   final PieceScoreHandControl handControl;
   final PieceScoreCursorBarData? cursor;
+  final Widget? playbackControls;
 
   @override
   Widget build(BuildContext context) {
@@ -145,6 +147,7 @@ class PieceScoreHeaderBar extends StatelessWidget {
       runSpacing: 6,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: <Widget>[
+        ?playbackControls,
         for (final mode in HandMode.values)
           _HandModeChip(
             mode: mode,

@@ -62,6 +62,7 @@ PieceScoreCursorBarData? buildPieceScoreCursorOrNull({
   required PracticeSessionState? sessionState,
   required PiecePracticeController? controller,
   required VoidCallback? onOpenLoopSheet,
+  VoidCallback? onStopPlayback,
 }) {
   if (loadedScore == null || sessionState == null || controller == null) {
     return null;
@@ -72,6 +73,7 @@ PieceScoreCursorBarData? buildPieceScoreCursorOrNull({
     sessionState: sessionState,
     controller: controller,
     onOpenLoopSheet: onOpenLoopSheet,
+    onStopPlayback: onStopPlayback,
   );
 }
 
@@ -84,6 +86,7 @@ class PieceScoreNormalBody extends StatelessWidget {
     required this.handControl,
     required this.cursor,
     required this.practiceBody,
+    this.playbackControls,
   });
 
   final PiecePracticeScreenData data;
@@ -91,6 +94,7 @@ class PieceScoreNormalBody extends StatelessWidget {
   final PieceScoreHandControl handControl;
   final PieceScoreCursorBarData? cursor;
   final Widget practiceBody;
+  final Widget? playbackControls;
 
   @override
   Widget build(BuildContext context) {
@@ -111,6 +115,7 @@ class PieceScoreNormalBody extends StatelessWidget {
             handControl: handControl,
             maxHeaderHeight: maxHeaderHeight,
             cursor: cursor,
+            playbackControls: playbackControls,
           ),
           const Divider(height: 1),
         ],
@@ -129,6 +134,7 @@ class PieceScoreHeaderStrip extends StatelessWidget {
     required this.handControl,
     required this.maxHeaderHeight,
     this.cursor,
+    this.playbackControls,
   });
 
   final PiecePracticeScreenData data;
@@ -136,6 +142,7 @@ class PieceScoreHeaderStrip extends StatelessWidget {
   final PieceScoreHandControl handControl;
   final double maxHeaderHeight;
   final PieceScoreCursorBarData? cursor;
+  final Widget? playbackControls;
 
   @override
   Widget build(BuildContext context) {
@@ -153,6 +160,7 @@ class PieceScoreHeaderStrip extends StatelessWidget {
           variantControl: variantControl,
           handControl: handControl,
           cursor: cursor,
+          playbackControls: playbackControls,
         ),
       ),
     );

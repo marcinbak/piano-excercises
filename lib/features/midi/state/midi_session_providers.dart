@@ -1,7 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:piano_exercises/features/midi/domain/midi_device_info.dart';
 import 'package:piano_exercises/features/midi/domain/midi_note_event.dart';
+import 'package:piano_exercises/features/midi/domain/midi_output_sink.dart';
 import 'package:piano_exercises/features/midi/state/midi_providers.dart';
+
+/// DI boundary for [MidiOutputSink]; overridden with [FlutterMidiOutputSink] in `app/`.
+final midiOutputSinkProvider = Provider<MidiOutputSink>((ref) {
+  return const NoopMidiOutputSink();
+});
 
 /// Live stream of normalized Note On/Off events from the active MIDI repository.
 final midiNoteEventsProvider = StreamProvider<MidiNoteEvent>((ref) {
