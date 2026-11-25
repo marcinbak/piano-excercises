@@ -89,12 +89,16 @@ class PieceScoreFullscreenView extends StatelessWidget {
     required this.onRotateQuarterTurn,
     required this.onExitFullscreen,
     required this.child,
+    this.isPlaying = false,
+    this.onTogglePlayback,
   });
 
   final int quarterTurns;
   final VoidCallback onRotateQuarterTurn;
   final VoidCallback onExitFullscreen;
   final Widget child;
+  final bool isPlaying;
+  final VoidCallback? onTogglePlayback;
 
   @override
   Widget build(BuildContext context) {
@@ -109,6 +113,8 @@ class PieceScoreFullscreenView extends StatelessWidget {
             right: 12,
             bottom: 12,
             child: _FullscreenControlsPill(
+              isPlaying: isPlaying,
+              onTogglePlayback: onTogglePlayback,
               onRotateQuarterTurn: onRotateQuarterTurn,
               onExitFullscreen: onExitFullscreen,
             ),
@@ -121,10 +127,14 @@ class PieceScoreFullscreenView extends StatelessWidget {
 
 class _FullscreenControlsPill extends StatelessWidget {
   const _FullscreenControlsPill({
+    required this.isPlaying,
+    required this.onTogglePlayback,
     required this.onRotateQuarterTurn,
     required this.onExitFullscreen,
   });
 
+  final bool isPlaying;
+  final VoidCallback? onTogglePlayback;
   final VoidCallback onRotateQuarterTurn;
   final VoidCallback onExitFullscreen;
 
@@ -143,6 +153,17 @@ class _FullscreenControlsPill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
+            if (onTogglePlayback != null)
+              IconButton(
+                key: const ValueKey<String>(
+                  'score_fullscreen_play_stop_button',
+                ),
+                tooltip: isPlaying ? 'Stop playback' : 'Play score',
+                visualDensity: VisualDensity.compact,
+                color: colorScheme.onSecondaryContainer,
+                icon: Icon(isPlaying ? Icons.stop : Icons.play_arrow),
+                onPressed: onTogglePlayback,
+              ),
             IconButton(
               key: const ValueKey<String>('score_rotate_button'),
               tooltip: 'Rotate 90°',

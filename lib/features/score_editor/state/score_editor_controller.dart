@@ -12,10 +12,12 @@ import 'package:piano_exercises/shared/music/music.dart';
 export 'package:piano_exercises/features/score_editor/state/score_editor_providers.dart'
     show
         ScoreEditorPausedNotifier,
+        ScoreEditorPlaybackPausedNotifier,
         ScoreEditorSessionPausedNotifier,
         scoreEditorChordWindowProvider,
         scoreEditorClockMsProvider,
         scoreEditorPausedProvider,
+        scoreEditorPlaybackPausedProvider,
         scoreEditorSessionPausedProvider;
 
 /// Orchestrates MIDI chord entry, touch edits, undo/redo, and variant loading.
@@ -247,6 +249,9 @@ class ScoreEditorController extends Notifier<ScoreEditorState> {
     ref.listen<bool>(scoreEditorSessionPausedProvider(arg), (_, _) {
       setPaused(_computeEffectivePaused());
     });
+    ref.listen<bool>(scoreEditorPlaybackPausedProvider(arg), (_, _) {
+      setPaused(_computeEffectivePaused());
+    });
     ref.listen<AsyncValue<List<MidiDeviceInfo>>>(midiDevicesProvider, (
       _,
       next,
@@ -302,7 +307,8 @@ class ScoreEditorController extends Notifier<ScoreEditorState> {
         arg == ScoreEditorSessionId.composeTab &&
         ref.read(scoreEditorPausedProvider);
     final sessionPaused = ref.read(scoreEditorSessionPausedProvider(arg));
-    return tabPaused || sessionPaused;
+    final playbackPaused = ref.read(scoreEditorPlaybackPausedProvider(arg));
+    return tabPaused || sessionPaused || playbackPaused;
   }
 
   int? _effectiveSelectedIndex() {

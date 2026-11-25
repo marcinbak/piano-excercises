@@ -8,11 +8,10 @@ import 'package:piano_exercises/features/piece_practice/piece_practice.dart'
     show PieceScoreScreen;
 import 'package:piano_exercises/features/score_editor/state/score_editor_controller.dart';
 import 'package:piano_exercises/features/score_editor/state/score_editor_state.dart';
-import 'package:piano_exercises/features/score_editor/ui/score_editor_header_strip.dart';
-import 'package:piano_exercises/features/score_editor/ui/score_editor_toolbar.dart';
-import 'package:piano_exercises/features/score_editor/ui/score_editor_viewport.dart';
+import 'package:piano_exercises/features/score_editor/ui/score_editor_playback_sync.dart';
 import 'package:piano_exercises/features/score_editor/ui/score_save_sheet.dart';
 import 'package:piano_exercises/features/score_editor/ui/score_setup_sheet.dart';
+import 'package:piano_exercises/features/score_playback/score_playback.dart';
 
 /// Step-time MIDI and touch grand-staff score composer and arranger screen.
 class ScoreEditorScreen extends ConsumerStatefulWidget {
@@ -38,6 +37,9 @@ class _ScoreEditorScreenState extends ConsumerState<ScoreEditorScreen> {
   bool _wasSessionPausedBeforeModal = false;
   bool _isOpeningModal = false;
 
+  ScorePlaybackSessionId get _playbackId =>
+      ScorePlaybackSessionId('editor_${widget.sessionId.value}');
+
   @override
   void initState() {
     super.initState();
@@ -58,17 +60,20 @@ class _ScoreEditorScreenState extends ConsumerState<ScoreEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.sessionId == ScoreEditorSessionId.composeTab) {
-      ref.listen<bool>(scoreEditorPausedProvider, (_, _) {});
-    }
-    ref.listen<bool>(
-      scoreEditorSessionPausedProvider(widget.sessionId),
-      (_, _) {},
+    listenScoreEditorPlaybackSync(
+      ref,
+      sessionId: widget.sessionId,
+      playbackId: _playbackId,
     );
-
     final state = ref.watch(scoreEditorControllerProvider(widget.sessionId));
     final controller = ref.read(
       scoreEditorControllerProvider(widget.sessionId).notifier,
+    );
+    final playbackState = ref.watch(
+      scorePlaybackControllerProvider(_playbackId),
+    );
+    final playbackController = ref.read(
+      scorePlaybackControllerProvider(_playbackId).notifier,
     );
     final isCompactHeight = MediaQuery.sizeOf(context).height < 480;
     final actionsDisabled = state.isLoadingVariant || state.loadError != null;
@@ -88,7 +93,7 @@ class _ScoreEditorScreenState extends ConsumerState<ScoreEditorScreen> {
             visualDensity: VisualDensity.compact,
             constraints: const BoxConstraints.tightFor(width: 36, height: 36),
             padding: EdgeInsets.zero,
-            icon: const Icon(Icons.play_arrow_outlined),
+            icon: const Icon(Icons.school_outlined),
             onPressed: actionsDisabled
                 ? null
                 : () => unawaited(_openPreviewPractice(state)),
@@ -114,73 +119,24 @@ class _ScoreEditorScreenState extends ConsumerState<ScoreEditorScreen> {
         ],
       ),
       body: SafeArea(
-        child: _buildBody(
+        child: ScoreEditorBody(
           state: state,
           controller: controller,
+          playbackState: playbackState,
+          playbackController: playbackController,
+          onOpenSetup: () => unawaited(_openSetupSheet(state, controller)),
           isCompactHeight: isCompactHeight,
         ),
       ),
     );
   }
 
-  Widget _buildBody({
-    required ScoreEditorState state,
-    required ScoreEditorController controller,
-    required bool isCompactHeight,
-  }) {
-    if (state.isLoadingVariant) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (state.loadError != null) {
-      return ScoreEditorLoadErrorView(
-        message: state.loadError!,
-        onRetry: state.binding == null
-            ? null
-            : () => unawaited(
-                controller.loadVariantForEditing(
-                  state.binding!.piece,
-                  state.binding!.variant,
-                ),
-              ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        ScoreEditorHeaderStrip(
-          state: state,
-          controller: controller,
-          onOpenSetup: () => unawaited(_openSetupSheet(state, controller)),
-          isCompact: isCompactHeight,
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.all(isCompactHeight ? 4 : 10),
-            child: ScoreEditorViewport(
-              score: state.score,
-              activeSliceIndex: state.activeSliceIndex,
-              onSliceTapped: controller.selectSlice,
-            ),
-          ),
-        ),
-        const Divider(height: 1),
-        ScoreEditorToolbar(
-          state: state,
-          controller: controller,
-          isCompact: isCompactHeight,
-        ),
-      ],
-    );
-  }
-
   void _pauseSessionBeforeModal() {
+    ref.read(scorePlaybackControllerProvider(_playbackId).notifier).stop();
     if (_modalPauseDepth == 0) {
-      final notifier = ref.read(
+      _wasSessionPausedBeforeModal = ref.read(
         scoreEditorSessionPausedProvider(widget.sessionId),
       );
-      _wasSessionPausedBeforeModal = notifier;
       ref
           .read(scoreEditorSessionPausedProvider(widget.sessionId).notifier)
           .setPaused(true);

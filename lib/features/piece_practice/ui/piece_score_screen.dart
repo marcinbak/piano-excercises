@@ -3,16 +3,15 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
-import 'package:piano_exercises/features/piece_practice/domain/hand_mode.dart';
-import 'package:piano_exercises/features/piece_practice/domain/score_practice_navigator.dart';
 import 'package:piano_exercises/features/piece_practice/state/piece_practice_controller.dart';
 import 'package:piano_exercises/features/piece_practice/state/piece_score_providers.dart';
 import 'package:piano_exercises/features/piece_practice/state/practice_session_state.dart';
-import 'package:piano_exercises/features/piece_practice/ui/measure_loop_sheet.dart';
 import 'package:piano_exercises/features/piece_practice/ui/piece_practice_body.dart';
 import 'package:piano_exercises/features/piece_practice/ui/piece_score_fullscreen_view.dart';
 import 'package:piano_exercises/features/piece_practice/ui/piece_score_header_bar.dart';
 import 'package:piano_exercises/features/piece_practice/ui/piece_score_header_strip.dart';
+import 'package:piano_exercises/features/piece_practice/ui/piece_score_playback_controls.dart';
+import 'package:piano_exercises/features/score_playback/score_playback.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 import 'package:smufl_notation/smufl_notation.dart';
 
@@ -41,6 +40,9 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   static int _nextRouteId = 1;
 
   late final int _routeId = _nextRouteId++;
+  late final ScorePlaybackSessionId _playbackId = ScorePlaybackSessionId(
+    'practice_route_$_routeId',
+  );
   late ScoreVariant _selectedVariant;
   int _modalPauseDepth = 0;
   bool _wasExternallyPausedBeforeModal = false;
@@ -51,48 +53,50 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedVariant = _matchVariant(widget.piece, widget.initialVariant?.id);
+    _selectedVariant = matchPieceScoreVariant(
+      widget.piece,
+      widget.initialVariant?.id,
+    );
   }
 
   @override
   void didUpdateWidget(covariant PieceScoreScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.piece.id != widget.piece.id) {
-      _selectedVariant = _matchVariant(widget.piece, widget.initialVariant?.id);
+      _selectedVariant = matchPieceScoreVariant(
+        widget.piece,
+        widget.initialVariant?.id,
+        fallback: _selectedVariant,
+      );
     }
   }
 
   @override
   void dispose() {
     if (_fullscreen.isFullscreen) {
-      // Restore OS bars when route pops directly out of fullscreen mode.
       unawaited(setFullscreenSystemUiMode(fullscreen: false));
     }
     super.dispose();
   }
 
-  ScoreVariant _matchVariant(Piece piece, String? preferredId) {
-    if (preferredId != null) {
-      for (final variant in piece.variants) {
-        if (variant.id == preferredId) {
-          return variant;
-        }
-      }
-    }
-    return piece.variants.isNotEmpty ? piece.variants.first : _selectedVariant;
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Retain autoDispose paused state across AsyncLoading before controller mounts.
-    ref.listen<bool>(practicePausedProvider, (_, _) {});
-    ref.listen<bool>(practiceRoutePausedProvider(_routeId), (_, _) {});
+    listenPieceScorePlaybackSync(
+      ref,
+      routeId: _routeId,
+      playbackId: _playbackId,
+    );
     final effectivePiece =
         ref.watch(livePieceProvider(widget.piece.id)).value ?? widget.piece;
-    final activeVariant = _matchVariant(effectivePiece, _selectedVariant.id);
-    final initialId = _matchVariant(
+    final activeVariant = matchPieceScoreVariant(
+      effectivePiece,
+      _selectedVariant.id,
+      fallback: _selectedVariant,
+    );
+    final initialId = matchPieceScoreVariant(
       effectivePiece,
       widget.initialVariant?.id,
+      fallback: _selectedVariant,
     ).id;
     final asyncScore =
         (widget.initialScore != null && activeVariant.id == initialId)
@@ -103,7 +107,26 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     final loadedScore = asyncScore.value;
     final screenSize = MediaQuery.sizeOf(context);
     final isCompactHeight = screenSize.height < 480;
-    final session = _watchSession(activeVariant, loadedScore);
+    final session = watchPiecePracticeSession(
+      ref,
+      activeVariant: activeVariant,
+      loadedScore: loadedScore,
+      routeId: _routeId,
+    );
+    final playbackState = ref.watch(
+      scorePlaybackControllerProvider(_playbackId),
+    );
+    final playbackController = ref.read(
+      scorePlaybackControllerProvider(_playbackId).notifier,
+    );
+    final canStartPlayback = ref.watch(canStartScorePlaybackProvider);
+    final playback = buildPieceScorePlaybackBinding(
+      loadedScore: loadedScore,
+      handMode: session.handMode,
+      sessionState: session.state,
+      playbackState: playbackState,
+      playbackController: playbackController,
+    );
     final practiceBody = PiecePracticeBody(
       asyncScore: asyncScore,
       handMode: session.handMode,
@@ -112,6 +135,8 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
         isCompactHeight: _fullscreen.isFullscreen || isCompactHeight,
         onRetry: () => ref.invalidate(variantScoreProvider(activeVariant)),
         controller: session.controller,
+        playbackSliceIndex: playback?.playbackSliceIndex,
+        onStopPlayback: playbackController.stop,
         staticWrongOverlays: widget.wrongNoteOverlays,
       ),
     );
@@ -147,6 +172,10 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
           child: _fullscreen.isFullscreen
               ? PieceScoreFullscreenView(
                   quarterTurns: _fullscreen.effectiveQuarterTurns(screenSize),
+                  isPlaying: playback?.isPlaying ?? false,
+                  onTogglePlayback: playback?.fullscreenToggle(
+                    canStartPlayback: canStartPlayback,
+                  ),
                   onRotateQuarterTurn: () => setState(
                     () =>
                         _fullscreen = _fullscreen.rotateQuarterTurn(screenSize),
@@ -170,15 +199,19 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
                     ),
                     handControl: PieceScoreHandControl(
                       handMode: session.handMode,
-                      onSelectHandMode: (mode) => ref
-                          .read(practiceHandModeProvider.notifier)
-                          .setMode(mode),
+                      onSelectHandMode: (mode) {
+                        playbackController.stop();
+                        ref
+                            .read(practiceHandModeProvider.notifier)
+                            .setMode(mode);
+                      },
                     ),
                     cursor: buildPieceScoreCursorOrNull(
                       loadedScore: loadedScore,
                       handMode: session.handMode,
                       sessionState: session.state,
                       controller: session.controller,
+                      onStopPlayback: playbackController.stop,
                       onOpenLoopSheet:
                           (loadedScore == null ||
                               loadedScore.measures.isEmpty ||
@@ -193,6 +226,15 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
                               ),
                             ),
                     ),
+                    playbackControls: playback == null
+                        ? null
+                        : ScorePlaybackControls(
+                            keyPrefix: 'score',
+                            isPlaying: playback.isPlaying,
+                            hasPlayableNotes: playback.hasPlayableNotes,
+                            onPlay: playback.onPlay,
+                            onStop: playback.onStop,
+                          ),
                     practiceBody: practiceBody,
                   ),
                 ),
@@ -201,32 +243,12 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
     );
   }
 
-  ({
-    HandMode handMode,
-    PracticeSessionState? state,
-    PiecePracticeController? controller,
-  })
-  _watchSession(ScoreVariant activeVariant, Score? loadedScore) {
-    final handMode = ref.watch(practiceHandModeProvider);
-    if (loadedScore == null) {
-      return (handMode: handMode, state: null, controller: null);
-    }
-    final key = PracticeSessionKey(
-      variantId: activeVariant.id,
-      score: loadedScore,
-      routeId: _routeId,
-    );
-    return (
-      handMode: handMode,
-      state: ref.watch(piecePracticeControllerProvider(key)),
-      controller: ref.read(piecePracticeControllerProvider(key).notifier),
-    );
-  }
-
   void _pauseBeforeModal() {
+    ref.read(scorePlaybackControllerProvider(_playbackId).notifier).stop();
     if (_modalPauseDepth == 0) {
-      final routePaused = ref.read(practiceRoutePausedProvider(_routeId));
-      _wasExternallyPausedBeforeModal = routePaused;
+      _wasExternallyPausedBeforeModal = ref.read(
+        practiceRoutePausedProvider(_routeId),
+      );
       ref.read(practiceRoutePausedProvider(_routeId).notifier).setPaused(true);
     }
     _modalPauseDepth += 1;
@@ -251,38 +273,23 @@ class _PieceScoreScreenState extends ConsumerState<PieceScoreScreen> {
       return;
     }
     _isOpeningLoopSheet = true;
-    final initialMeasure = sessionState.activeSliceOrdinal == null
-        ? 0
-        : ScorePracticeNavigator.measureIndexOfSliceOrdinal(
-            score,
-            sessionState.activeSliceOrdinal!,
-          );
-    _pauseBeforeModal();
-    final MeasureLoopSheetResult? result;
     try {
-      result = await MeasureLoopSheet.show(
-        context,
-        measures: score.measures,
-        initialMeasureIndex: initialMeasure,
-        currentLoop: sessionState.loopRange,
+      await presentPieceMeasureLoopSheet(
+        context: context,
+        score: score,
+        sessionState: sessionState,
+        controller: controller,
+        onBeforeModal: _pauseBeforeModal,
+        onAfterModal: _restoreAfterModal,
       );
     } finally {
       _isOpeningLoopSheet = false;
-      _restoreAfterModal();
-    }
-    if (!mounted || result == null) {
-      return;
-    }
-    switch (result) {
-      case MeasureLoopApply(:final range):
-        controller.setLoopRange(range);
-      case MeasureLoopClear():
-        controller.setLoopRange(null);
     }
   }
 
   void _selectVariant(ScoreVariant variant) {
     if (variant.id != _selectedVariant.id) {
+      ref.read(scorePlaybackControllerProvider(_playbackId).notifier).stop();
       setState(() => _selectedVariant = variant);
     }
   }

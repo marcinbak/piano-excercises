@@ -14,11 +14,13 @@ export 'package:piano_exercises/features/piece_practice/state/piece_score_provid
     show
         PracticeHandModeNotifier,
         PracticePausedNotifier,
+        PracticePlaybackPausedNotifier,
         PracticeRoutePausedNotifier,
         practiceChordWindowProvider,
         practiceClockMsProvider,
         practiceHandModeProvider,
         practicePausedProvider,
+        practicePlaybackPausedProvider,
         practiceRoutePausedProvider,
         practiceSuccessHoldDurationProvider;
 
@@ -162,6 +164,9 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
     ref.listen<bool>(practiceRoutePausedProvider(arg.routeId), (_, _) {
       setPaused(_computeEffectivePaused());
     });
+    ref.listen<bool>(practicePlaybackPausedProvider(arg.routeId), (_, _) {
+      setPaused(_computeEffectivePaused());
+    });
     ref.listen<AsyncValue<List<MidiDeviceInfo>>>(midiDevicesProvider, (
       _,
       next,
@@ -248,7 +253,8 @@ class PiecePracticeController extends Notifier<PracticeSessionState> {
 
   bool _computeEffectivePaused() =>
       ref.read(practicePausedProvider) ||
-      ref.read(practiceRoutePausedProvider(arg.routeId));
+      ref.read(practiceRoutePausedProvider(arg.routeId)) ||
+      ref.read(practicePlaybackPausedProvider(arg.routeId));
 }
 
 final piecePracticeControllerProvider = NotifierProvider.autoDispose

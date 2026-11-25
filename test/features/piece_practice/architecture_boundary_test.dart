@@ -84,6 +84,13 @@ void main() {
               reason: '${file.path} must import midi barrel only.',
             );
           }
+          if (uri.contains('/features/score_playback/')) {
+            expect(
+              uri,
+              'package:piano_exercises/features/score_playback/score_playback.dart',
+              reason: '${file.path} must import score_playback barrel only.',
+            );
+          }
         }
       }
     });
@@ -114,6 +121,13 @@ void main() {
               uri,
               'package:piano_exercises/features/midi/midi.dart',
               reason: '${file.path} must import midi barrel only.',
+            );
+          }
+          if (uri.contains('/features/score_playback/')) {
+            expect(
+              uri,
+              'package:piano_exercises/features/score_playback/score_playback.dart',
+              reason: '${file.path} must import score_playback barrel only.',
             );
           }
         }

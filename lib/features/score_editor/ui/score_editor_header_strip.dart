@@ -1,21 +1,31 @@
 import 'package:material_ui/material_ui.dart';
+import 'package:piano_exercises/features/score_editor/domain/score_draft_mutations.dart';
 import 'package:piano_exercises/features/score_editor/state/score_editor_controller.dart';
 import 'package:piano_exercises/features/score_editor/state/score_editor_state.dart';
+import 'package:piano_exercises/features/score_playback/score_playback.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 
-/// Compact horizontally scrollable strip displaying undo/redo, setup, bar actions, and position.
+/// Compact horizontally scrollable strip displaying playback, undo/redo, reset, setup, and bar controls.
 class ScoreEditorHeaderStrip extends StatelessWidget {
   const ScoreEditorHeaderStrip({
     super.key,
     required this.state,
     required this.controller,
     required this.onOpenSetup,
+    required this.onResetScore,
+    required this.isPlaying,
+    required this.onPlay,
+    required this.onStop,
     required this.isCompact,
   });
 
   final ScoreEditorState state;
   final ScoreEditorController controller;
   final VoidCallback onOpenSetup;
+  final VoidCallback onResetScore;
+  final bool isPlaying;
+  final VoidCallback onPlay;
+  final VoidCallback onStop;
   final bool isCompact;
 
   @override
@@ -46,6 +56,15 @@ class ScoreEditorHeaderStrip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
+          ScorePlaybackControls(
+            keyPrefix: 'editor',
+            isPlaying: isPlaying,
+            hasPlayableNotes: draft.hasAnyNotes,
+            onPlay: onPlay,
+            onStop: onStop,
+            showSpeedChip: false,
+          ),
+          const SizedBox(width: 4),
           IconButton(
             key: const ValueKey<String>('editor-undo-button'),
             tooltip: 'Undo',
@@ -62,8 +81,19 @@ class ScoreEditorHeaderStrip extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           ActionChip(
+            key: const ValueKey<String>('editor-reset-button'),
+            tooltip: 'Clear all notes',
+            visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            avatar: const Icon(Icons.restart_alt, size: 16),
+            label: const Text('Reset'),
+            onPressed: draft.canClearScore ? onResetScore : null,
+          ),
+          const SizedBox(width: 4),
+          ActionChip(
             key: const ValueKey<String>('editor-open-setup-button'),
             visualDensity: VisualDensity.compact,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             avatar: const Icon(Icons.tune, size: 16),
             label: Text('${draft.scale.label} · ${draft.timeSignature.label}'),
             onPressed: onOpenSetup,

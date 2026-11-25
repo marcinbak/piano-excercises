@@ -6,6 +6,7 @@ import 'package:piano_exercises/app/app_navigation_shell.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
 import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/features/progression/progression.dart';
+import 'package:piano_exercises/features/score_playback/score_playback.dart';
 
 /// Initializes persistence before first frame and returns the configured app root.
 Future<PianoExercisesRoot> bootstrapPianoExercisesRoot({
@@ -88,6 +89,20 @@ class PianoExercisesRoot extends StatelessWidget {
             unawaited(repository.dispose());
           });
           return repository;
+        }),
+        midiOutputSinkProvider.overrideWith((ref) {
+          final sink = FlutterMidiOutputSink();
+          ref.onDispose(() {
+            unawaited(sink.sendAllNotesOff());
+          });
+          return sink;
+        }),
+        pcmAudioOutputProvider.overrideWith((ref) {
+          final output = MethodChannelPcmAudioOutput();
+          ref.onDispose(() {
+            unawaited(output.dispose());
+          });
+          return output;
         }),
         scoreParserProvider.overrideWithValue(const MusicXmlScoreParser()),
         scoreSerializerProvider.overrideWithValue(

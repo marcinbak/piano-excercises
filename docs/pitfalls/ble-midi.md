@@ -11,3 +11,9 @@
 - **Symptom:** `startScan()` hangs indefinitely if the host adapter never completes initialization.
 - **Root cause:** `MidiCommand.waitUntilBluetoothIsInitialized()` has no built-in timeout after `startBluetooth()`.
 - **Fix:** Bound `waitUntilBluetoothIsInitialized()` with a 2-second timeout and check `bluetoothState` explicitly before calling `startScanningForBluetoothDevices()`.
+
+## Unscoped `sendDataAwaitingDelivery` bypasses active BLE route
+
+- **Symptom:** Calling `MidiCommand.sendDataAwaitingDelivery(bytes)` with `deviceId: null` skips BLE delivery backpressure and invokes unguarded Pigeon `MidiHostApi.sendData`.
+- **Root cause:** `MidiCommand.sendDataAwaitingDelivery` checks `_activeDeviceRouteById[deviceId]` only when `deviceId != null`, falling back to fire-and-forget `sendData` across both platform and BLE otherwise.
+- **Fix:** Pass each connected `MidiDeviceInfo.id` as `deviceId` when sending Note On/Off and All Notes Off ([score_playback_controller.dart](../../lib/features/score_playback/state/score_playback_controller.dart), [flutter_midi_output_sink.dart](../../lib/features/midi/data/flutter_midi_output_sink.dart)).

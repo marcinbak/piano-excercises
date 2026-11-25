@@ -107,6 +107,7 @@ void main() {
       for (final dir in const <String>[
         'lib/features/catalog',
         'lib/features/midi',
+        'lib/features/score_playback',
         'lib/features/piece_practice',
       ]) {
         for (final file in dartFilesIn(dir)) {
@@ -152,6 +153,13 @@ void main() {
               uri,
               'package:piano_exercises/features/piece_practice/piece_practice.dart',
               reason: '${file.path} must import piece_practice barrel only.',
+            );
+          }
+          if (uri.contains('/features/score_playback/')) {
+            expect(
+              uri,
+              'package:piano_exercises/features/score_playback/score_playback.dart',
+              reason: '${file.path} must import score_playback barrel only.',
             );
           }
         }

@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:piano_exercises/features/catalog/catalog.dart';
 import 'package:piano_exercises/features/midi/midi.dart';
 import 'package:piano_exercises/features/piece_practice/piece_practice.dart';
+import 'package:piano_exercises/features/score_playback/score_playback.dart';
 import 'package:piano_exercises/shared/music/music.dart';
 import 'package:smufl_notation/smufl_notation.dart';
 
@@ -905,7 +906,137 @@ void main() {
         expect(_findScorePainter(tester).activeSliceIndex, 3);
       },
     );
+
+    testWidgets(
+      'plays piece on device speaker and connected MIDI piano, pauses Wait-Mode input, and supports fullscreen toggle',
+      (tester) async {
+        final midiRepo = _FakeMidiRepository();
+        final midiSink = _FakePracticeMidiSink();
+        final pcmOut = _FakePracticePcmOutput();
+        final store = InMemoryScoreFileStore();
+        addTearDown(midiRepo.dispose);
+
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              midiRepositoryProvider.overrideWithValue(midiRepo),
+              midiOutputSinkProvider.overrideWithValue(midiSink),
+              pcmAudioOutputProvider.overrideWithValue(pcmOut),
+              scoreFileStoreProvider.overrideWithValue(store),
+              scoreParserProvider.overrideWithValue(
+                const MusicXmlScoreParser(),
+              ),
+            ],
+            child: MaterialApp(
+              home: PieceScoreScreen(
+                piece: piece,
+                initialVariant: vSimple,
+                initialScore: simpleScore,
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Start playback on device speaker (no MIDI connected).
+        final playStopBtn = find.byKey(
+          const ValueKey<String>('score-play-stop-button'),
+        );
+        await tester.ensureVisible(playStopBtn);
+        await tester.tap(playStopBtn);
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(pcmOut.enqueuedChunks, greaterThan(0));
+
+        // Echoed wrong MIDI input during playback must NOT create wrong-note overlays.
+        midiRepo.noteEventsController.add(_noteOn(61));
+        await tester.pump(const Duration(milliseconds: 40));
+        midiRepo.noteEventsController.add(_noteOff(61));
+        await tester.pump();
+        expect(_findScorePainter(tester).wrongNoteOverlays, isEmpty);
+
+        // Stop playback.
+        await tester.tap(playStopBtn);
+        await tester.pump();
+        expect(pcmOut.stopCalls, greaterThan(0));
+
+        // Connect BLE-MIDI piano -> Auto routes playback to MIDI sink, including in fullscreen.
+        midiRepo.devicesController.add(const <MidiDeviceInfo>[
+          MidiDeviceInfo(
+            id: 'ble-1',
+            name: 'Roland FP-30X',
+            typeLabel: 'BLE',
+            isConnected: true,
+          ),
+        ]);
+        await tester.pump();
+
+        await tester.tap(
+          find.byKey(const ValueKey<String>('score_fullscreen_button')),
+        );
+        await tester.pumpAndSettle();
+        final fsPlayBtn = find.byKey(
+          const ValueKey<String>('score_fullscreen_play_stop_button'),
+        );
+        expect(fsPlayBtn, findsOneWidget);
+
+        await tester.tap(fsPlayBtn);
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(midiSink.noteOns, containsAll(<int>[67, 43]));
+
+        await tester.tap(fsPlayBtn);
+        await tester.pump();
+        expect(midiSink.allOffCalls, greaterThan(0));
+      },
+    );
   });
+}
+
+class _FakePracticeMidiSink implements MidiOutputSink {
+  final List<int> noteOns = <int>[];
+  int allOffCalls = 0;
+
+  @override
+  Future<void> sendNoteOn(
+    MidiNote note, {
+    int velocity = 96,
+    int channel = 0,
+    String? deviceId,
+  }) async {
+    noteOns.add(note.number);
+  }
+
+  @override
+  Future<void> sendNoteOff(
+    MidiNote note, {
+    int channel = 0,
+    String? deviceId,
+  }) async {}
+
+  @override
+  Future<void> sendAllNotesOff({int channel = 0, String? deviceId}) async {
+    allOffCalls += 1;
+  }
+}
+
+class _FakePracticePcmOutput implements PcmAudioOutput {
+  @override
+  int get sampleRate => 24000;
+
+  int enqueuedChunks = 0;
+  int stopCalls = 0;
+
+  @override
+  Future<void> enqueuePcm16Mono(Uint8List pcmBytes) async {
+    enqueuedChunks += 1;
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCalls += 1;
+  }
+
+  @override
+  Future<void> dispose() async {}
 }
 
 class _CompleterScoreFileStore implements ScoreFileStore {
